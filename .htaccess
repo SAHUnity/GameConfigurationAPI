@@ -1,0 +1,123 @@
+# Enable URL rewriting
+RewriteEngine On
+
+# API routes
+RewriteRule ^api/v1/config/([^/]+)/?$ api/v1/config.php?game_id=$1 [L,QSA]
+RewriteRule ^api/v1/config/([^/]+)/([^/]+)/?$ api/v1/config.php?game_id=$1&key=$2 [L,QSA]
+RewriteRule ^api/v1/admin/?$ api/v1/admin/index.php [L,QSA]
+RewriteRule ^api/v1/admin/([^/]+)/?$ api/v1/admin/$1.php [L,QSA]
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Prevent access to sensitive files and directories
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^(config|database|\.env)">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(log|sql|bak|backup|old)$">
+    Require all denied
+</FilesMatch>
+
+# Restrict access to includes directory
+<IfModule mod_authz_core.c>
+    <Directory "includes">
+        Require all denied
+    </Directory>
+</IfModule>
+
+# Restrict access to config directory
+<IfModule mod_authz_core.c>
+    <Directory "config">
+        Require all denied
+    </Directory>
+</IfModule>
+
+# Restrict access to cache directory
+<IfModule mod_authz_core.c>
+    <Directory "cache">
+        Require all denied
+    </Directory>
+</IfModule>
+
+# Restrict access to rate_limits directory
+<IfModule mod_authz_core.c>
+    <Directory "rate_limits">
+        Require all denied
+    </Directory>
+</IfModule>
+
+# Restrict access to logs directory
+<IfModule mod_authz_core.c>
+    <Directory "logs">
+        Require all denied
+    </Directory>
+</IfModule>
+
+# PHP settings
+<IfModule mod_php7.c>
+    php_value display_errors 0
+    php_value log_errors 1
+    php_value error_log logs/php_error.log
+    php_value max_execution_time 30
+    php_value memory_limit 128M
+    php_value post_max_size 8M
+    php_value upload_max_filesize 2M
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_value display_errors 0
+    php_value log_errors 1
+    php_value error_log logs/php_error.log
+    php_value max_execution_time 30
+    php_value memory_limit 128M
+    php_value post_max_size 8M
+    php_value upload_max_filesize 2M
+</IfModule>
+
+# Set default charset
+AddDefaultCharset UTF-8
+
+# Gzip compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE application/json
+</IfModule>
+
+# Set MIME types
+<IfModule mod_mime.c>
+    AddType application/json .json
+    AddType text/css .css
+    AddType application/javascript .js
+</IfModule>
+
+# Cache control for static files
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/ico "access plus 1 month"
+    ExpiresByType image/icon "access plus 1 month"
+    ExpiresByType text/html "access plus 1 hour"
+</IfModule>
