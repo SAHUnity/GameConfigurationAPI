@@ -1,5 +1,10 @@
-# Enable URL rewriting
+# Game Configuration API - Drag & Drop Ready
+# Compatible with both main domain and subdomain deployments
+
+# Force HTTPS (will work once SSL is installed)
 RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # API routes
 RewriteRule ^api/v1/config/([^/]+)/?$ api/v1/config.php?game_id=$1 [L,QSA]
@@ -13,6 +18,18 @@ RewriteRule ^api/v1/admin/([^/]+)/?$ api/v1/admin/$1.php [L,QSA]
     Header always set X-Frame-Options DENY
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # CORS headers for Unity WebGL
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, X-API-Key, Authorization"
+    Header always set Access-Control-Max-Age "600"
+</IfModule>
+
+# Handle preflight requests (CORS OPTIONS)
+<IfModule mod_rewrite.c>
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ - [R=200,L]
 </IfModule>
 
 # Prevent access to sensitive files and directories
@@ -28,60 +45,36 @@ RewriteRule ^api/v1/admin/([^/]+)/?$ api/v1/admin/$1.php [L,QSA]
     Require all denied
 </FilesMatch>
 
-# Restrict access to includes directory
-<IfModule mod_authz_core.c>
-    <Directory "includes">
-        Require all denied
-    </Directory>
-</IfModule>
+# Restrict access to sensitive directories - Fixed pattern to allow admin directory
+<FilesMatch "^(includes/|cache/|rate_limits/|logs/)">
+    Require all denied
+</FilesMatch>
 
-# Restrict access to config directory
-<IfModule mod_authz_core.c>
-    <Directory "config">
-        Require all denied
-    </Directory>
-</IfModule>
-
-# Restrict access to cache directory
-<IfModule mod_authz_core.c>
-    <Directory "cache">
-        Require all denied
-    </Directory>
-</IfModule>
-
-# Restrict access to rate_limits directory
-<IfModule mod_authz_core.c>
-    <Directory "rate_limits">
-        Require all denied
-    </Directory>
-</IfModule>
-
-# Restrict access to logs directory
-<IfModule mod_authz_core.c>
-    <Directory "logs">
-        Require all denied
-    </Directory>
-</IfModule>
-
-# PHP settings
+# PHP settings - optimized for most cPanel environments
 <IfModule mod_php7.c>
     php_value display_errors 0
     php_value log_errors 1
-    php_value error_log logs/php_error.log
     php_value max_execution_time 30
-    php_value memory_limit 128M
-    php_value post_max_size 8M
-    php_value upload_max_filesize 2M
+    php_value memory_limit 256M
+    php_value post_max_size 32M
+    php_value upload_max_filesize 32M
+    php_value max_input_vars 3000
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure 1
+    php_value session.use_only_cookies 1
 </IfModule>
 
 <IfModule mod_php8.c>
     php_value display_errors 0
     php_value log_errors 1
-    php_value error_log logs/php_error.log
     php_value max_execution_time 30
-    php_value memory_limit 128M
-    php_value post_max_size 8M
-    php_value upload_max_filesize 2M
+    php_value memory_limit 256M
+    php_value post_max_size 32M
+    php_value upload_max_filesize 32M
+    php_value max_input_vars 3000
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure 1
+    php_value session.use_only_cookies 1
 </IfModule>
 
 # Set default charset
@@ -120,4 +113,48 @@ AddDefaultCharset UTF-8
     ExpiresByType image/ico "access plus 1 month"
     ExpiresByType image/icon "access plus 1 month"
     ExpiresByType text/html "access plus 1 hour"
+</IfModule>
+
+# Error pages
+ErrorDocument 404 /index.php
+ErrorDocument 500 /index.php
+ErrorDocument 403 /index.php
+
+# Directory index
+DirectoryIndex index.php index.html
+
+# Block common exploit attempts
+<IfModule mod_rewrite.c>
+    RewriteCond %{QUERY_STRING} (\<|%3C).*script.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} base64_encode.*\( [NC,OR]
+    RewriteCond %{QUERY_STRING} (\<|%3C).*iframe.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} GLOBALS(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} _REQUEST(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} ^.*(\[|\]|\(|\)|<|>|�|"|'|\||\||\?|).* [NC]
+    RewriteRule ^(.*)$ index.php [F,L]
+</IfModule>
+
+# Auto-detect environment and set appropriate PHP settings
+<IfModule mod_env.c>
+    # Default to production for security
+    SetEnv ENVIRONMENT production
+    
+    # Override to development if on localhost or specific IP ranges
+    SetEnvIf Remote_Addr ^(127\.0\.0\.1|::1|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|localhost) ENVIRONMENT development
+</IfModule>
+
+# Performance optimization
+<IfModule mod_rewrite.c>
+    # Add trailing slash if missing (for directories)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_URI} !(.*)/$
+    RewriteCond %{REQUEST_METHOD} GET
+    RewriteRule ^(.*)$ $1/ [L,R=301]
+</IfModule>
+
+# PHP-FPM optimization (if available)
+<IfModule mod_proxy_fcgi.c>
+    <Proxy "fcgi://localhost/" enable=1>
+        ProxySet timeout=300
+    </Proxy>
 </IfModule>

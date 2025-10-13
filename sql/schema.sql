@@ -1,13 +1,12 @@
--- Create database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS game_config_api;
-USE game_config_api;
+-- cPanel Compatible Database Schema
+-- Note: Create the database through cPanel interface first, then run this script
 
 -- Games table
 CREATE TABLE games (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     game_id VARCHAR(50) UNIQUE NOT NULL,
-    api_key VARCHAR(64) UNIQUE NOT NULL,
+    api_key VARCHAR(128) UNIQUE NOT NULL,
     description TEXT,
     status ENUM('active', 'inactive') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

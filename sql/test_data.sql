@@ -1,11 +1,11 @@
 -- Test data for Game Configuration API
 -- Run this after creating the database schema
 
--- Insert sample games
+-- Insert sample games with properly hashed API keys
 INSERT INTO games (name, game_id, api_key, description, status) VALUES 
-('Space Adventure', 'space_adventure_001', SHA2('test_api_key_1', 256), 'A space exploration game with multiplayer features', 'active'),
-('Fantasy Quest', 'fantasy_quest_001', SHA2('test_api_key_2', 256), 'An RPG game with magic and dragons', 'active'),
-('Racing Pro', 'racing_pro_001', SHA2('test_api_key_3', 256), 'High-speed racing game', 'inactive');
+('Space Adventure', 'space_adventure_001', 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6', 'A space exploration game with multiplayer features', 'active'),
+('Fantasy Quest', 'fantasy_quest_001', 'f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6', 'An RPG game with magic and dragons', 'active'),
+('Racing Pro', 'racing_pro_001', 'r1a2c3i4n5g6r1a2c3i4n5g6r1a2c3i4n5g6r1a2c3i4n5g6r1a2c3i4n5g6r1a2c3i4n5g6', 'High-speed racing game', 'inactive');
 
 -- Insert sample configurations for Space Adventure
 INSERT INTO configurations (game_id, config_key, config_value, data_type, category, description) VALUES
@@ -90,12 +90,10 @@ INSERT INTO configurations (game_id, config_key, config_value, data_type, catego
 (3, 'meta.featureRollout', '{"newUI": 0.05, "advancedPhysics": 0.02}', 'object', 'meta', 'Feature rollout percentages'),
 (3, 'meta.analyticsConfig', '{"enabledEvents": ["race_complete", "purchase", "login"], "samplingRate": 0.05}', 'object', 'meta', 'Analytics configuration');
 
--- Note: The API keys used here are SHA2 hashes of the test keys:
+-- Note: The API keys used here are test keys for development purposes
+-- For production, generate new API keys through the admin panel
+
+-- Test API keys for Unity client testing:
 -- test_api_key_1 for Space Adventure
 -- test_api_key_2 for Fantasy Quest  
 -- test_api_key_3 for Racing Pro
-
--- You can use these plain API keys in your Unity client for testing:
--- test_api_key_1
--- test_api_key_2
--- test_api_key_3

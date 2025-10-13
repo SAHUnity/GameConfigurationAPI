@@ -1,5 +1,7 @@
 -- Login attempts table for brute force protection
-CREATE TABLE IF NOT EXISTS login_attempts (
+-- Note: Import this after creating the database through cPanel
+
+CREATE TABLE login_attempts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     identifier VARCHAR(255) NOT NULL, -- IP address or username
     success TINYINT(1) NOT NULL DEFAULT 0, -- 0 for failed, 1 for successful
