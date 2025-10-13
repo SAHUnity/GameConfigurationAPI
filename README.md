@@ -18,11 +18,12 @@ A secure, high-performance REST API for managing game configurations with enterp
 1. Clone this repository
 2. Copy `.env.example` to `.env` and configure your settings
 3. Set up the database using the provided SQL files
-4. Deploy to your web server
+4. Follow the [Complete Deployment & Integration Guide](COMPLETE_DEPLOYMENT_INTEGRATION_GUIDE.md)
 
 ## Documentation
 
-- [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md) - Comprehensive deployment instructions
+- [Complete Deployment & Integration Guide](COMPLETE_DEPLOYMENT_INTEGRATION_GUIDE.md) - Everything you need to deploy and integrate
+- [System Architecture](system_architecture.md) - Technical architecture details
 - [Environment Configuration](.env.example) - Environment variables template
 
 ## API Endpoints
