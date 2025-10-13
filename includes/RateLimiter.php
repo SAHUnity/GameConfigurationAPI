@@ -18,7 +18,14 @@ class RateLimiter
             mkdir(RATE_LIMIT_PATH, 0755, true);
         }
 
-        $rateFile = RATE_LIMIT_PATH . '/' . md5($ip) . '.json';
+        static $rateFiles = [];
+        $ipHash = md5($ip);
+
+        if (!isset($rateFiles[$ipHash])) {
+            $rateFiles[$ipHash] = RATE_LIMIT_PATH . '/' . $ipHash . '.json';
+        }
+        $rateFile = $rateFiles[$ipHash];
+
         $now = time();
 
         // Clean old rate limit files periodically
@@ -58,7 +65,14 @@ class RateLimiter
      */
     public static function getRemainingRequests($ip, $limit = RATE_LIMIT_REQUESTS, $window = RATE_LIMIT_WINDOW)
     {
-        $rateFile = RATE_LIMIT_PATH . '/' . md5($ip) . '.json';
+        static $rateFiles = [];
+        $ipHash = md5($ip);
+
+        if (!isset($rateFiles[$ipHash])) {
+            $rateFiles[$ipHash] = RATE_LIMIT_PATH . '/' . $ipHash . '.json';
+        }
+        $rateFile = $rateFiles[$ipHash];
+
         $now = time();
 
         if (!file_exists($rateFile)) {
@@ -82,7 +96,14 @@ class RateLimiter
      */
     public static function resetLimit($ip)
     {
-        $rateFile = RATE_LIMIT_PATH . '/' . md5($ip) . '.json';
+        static $rateFiles = [];
+        $ipHash = md5($ip);
+
+        if (!isset($rateFiles[$ipHash])) {
+            $rateFiles[$ipHash] = RATE_LIMIT_PATH . '/' . $ipHash . '.json';
+        }
+        $rateFile = $rateFiles[$ipHash];
+
         if (file_exists($rateFile)) {
             unlink($rateFile);
         }

@@ -6,18 +6,22 @@ require_once '../includes/Auth.php';
 
 // Handle login
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $database = new Database();
+    $database = Database::getInstance();
     $pdo = $database->getConnection();
     $auth = new Auth($pdo);
 
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    if ($auth->loginAdmin($username, $password)) {
+    list($success, $message, $remainingAttempts, $lockoutTime) = $auth->loginAdmin($username, $password);
+
+    if ($success) {
         header('Location: dashboard.php');
         exit;
     } else {
-        $error = 'Invalid username or password';
+        $error = $message;
+        $remainingAttempts = $remainingAttempts;
+        $lockoutTime = $lockoutTime;
     }
 }
 ?>
@@ -172,7 +176,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <?php if (isset($error)): ?>
-            <div class="error"><?php echo htmlspecialchars($error); ?></div>
+            <div class="error">
+                <?php echo htmlspecialchars($error); ?>
+                <?php if (isset($remainingAttempts) && $remainingAttempts > 0): ?>
+                    <br><small>Remaining attempts: <?php echo $remainingAttempts; ?></small>
+                <?php endif; ?>
+                <?php if (isset($lockoutTime) && $lockoutTime > 0): ?>
+                    <br><small>Account locked for <?php echo ceil($lockoutTime / 60); ?> minutes</small>
+                <?php endif; ?>
+            </div>
         <?php endif; ?>
 
         <div class="default-credentials">

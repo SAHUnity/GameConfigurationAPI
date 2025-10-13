@@ -9,12 +9,15 @@ require_once '../../../config/config.php';
 require_once '../../../includes/ResponseHandler.php';
 require_once '../../../includes/Auth.php';
 require_once '../../../includes/RateLimiter.php';
+require_once '../../../includes/SecurityMiddleware.php';
+require_once '../../../includes/UtilityFunctions.php';
 require_once '../../../config/database.php';
 
 // Initialize database and auth
-$database = new Database();
+$database = Database::getInstance();
 $pdo = $database->getConnection();
 $auth = new Auth($pdo);
+$security = new SecurityMiddleware($pdo);
 
 // Rate limiting
 $clientIp = $_SERVER['REMOTE_ADDR'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? 'unknown';

@@ -2,18 +2,15 @@
 require_once '../config/config.php';
 require_once '../config/database.php';
 require_once '../includes/Auth.php';
+require_once '../includes/AuthMiddleware.php';
+require_once '../includes/SecurityMiddleware.php';
 
 // Check authentication
-$database = new Database();
+$database = Database::getInstance();
 $pdo = $database->getConnection();
-$auth = new Auth($pdo);
-
-if (!$auth->validateAdminSession()) {
-    header('Location: index.php');
-    exit;
-}
-
-$admin = $auth->getCurrentAdmin();
+$authMiddleware = new AuthMiddleware($pdo);
+$admin = $authMiddleware->requireAuth();
+$security = new SecurityMiddleware($pdo);
 
 // Handle form submissions
 $message = '';
@@ -23,32 +20,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
             case 'create':
-                $name = $_POST['name'] ?? '';
-                $gameId = $_POST['game_id'] ?? '';
-                $description = $_POST['description'] ?? '';
-                $status = $_POST['status'] ?? 'active';
+                // Validate input
+                $rules = [
+                    'name' => ['required' => true, 'type' => 'string', 'max_length' => 100],
+                    'game_id' => ['required' => true, 'type' => 'alphanumeric', 'max_length' => 50],
+                    'description' => ['required' => false, 'type' => 'string', 'max_length' => 1000, 'default' => null],
+                    'status' => ['required' => false, 'type' => 'string', 'max_length' => 20, 'default' => 'active']
+                ];
 
-                if (empty($name) || empty($gameId)) {
-                    $message = 'Name and Game ID are required';
+                list($validated, $errors) = $authMiddleware->validateConfigInput($_POST, $rules);
+
+                if (!empty($errors)) {
+                    $message = 'Validation errors: ' . implode(', ', $errors);
                     $messageType = 'error';
                 } else {
                     // Check if game_id already exists
                     $checkStmt = $pdo->prepare("SELECT id FROM games WHERE game_id = ?");
-                    $checkStmt->execute([$gameId]);
+                    $checkStmt->execute([$validated['game_id']]);
                     if ($checkStmt->fetch()) {
                         $message = 'Game ID already exists';
                         $messageType = 'error';
                     } else {
                         // Generate API key
+                        $auth = new Auth($pdo);
                         $apiKey = $auth->generateApiKey();
-                        $hashedApiKey = hash('sha256', $apiKey);
+                        $hashedApiKey = hash('sha384', $apiKey) . hash('ripemd160', $apiKey);
 
                         $stmt = $pdo->prepare("
-                            INSERT INTO games (name, game_id, api_key, description, status) 
+                            INSERT INTO games (name, game_id, api_key, description, status)
                             VALUES (?, ?, ?, ?, ?)
                         ");
 
-                        if ($stmt->execute([$name, $gameId, $hashedApiKey, $description, $status])) {
+                        if ($stmt->execute([
+                            $validated['name'],
+                            $validated['game_id'],
+                            $hashedApiKey,
+                            $validated['description'],
+                            $validated['status']
+                        ])) {
                             $message = "Game created successfully! API Key: <code>" . htmlspecialchars($apiKey) . "</code>";
                             $messageType = 'success';
                         } else {
@@ -61,30 +70,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'delete':
                 $gameId = $_POST['game_id'] ?? '';
-                if (!empty($gameId)) {
-                    $stmt = $pdo->prepare("DELETE FROM games WHERE id = ?");
-                    if ($stmt->execute([$gameId])) {
-                        $message = 'Game deleted successfully';
-                        $messageType = 'success';
+                $gameId = $security->validateInput($gameId, 'int');
+
+                if ($gameId !== false && !empty($gameId)) {
+                    // Verify game exists
+                    $checkStmt = $pdo->prepare("SELECT id FROM games WHERE id = ?");
+                    $checkStmt->execute([$gameId]);
+                    if ($checkStmt->fetch()) {
+                        $stmt = $pdo->prepare("DELETE FROM games WHERE id = ?");
+                        if ($stmt->execute([$gameId])) {
+                            $message = 'Game deleted successfully';
+                            $messageType = 'success';
+                        } else {
+                            $message = 'Failed to delete game';
+                            $messageType = 'error';
+                        }
                     } else {
-                        $message = 'Failed to delete game';
+                        $message = 'Game not found';
                         $messageType = 'error';
                     }
+                } else {
+                    $message = 'Invalid game ID';
+                    $messageType = 'error';
                 }
                 break;
 
             case 'update_status':
                 $gameId = $_POST['game_id'] ?? '';
                 $status = $_POST['status'] ?? '';
-                if (!empty($gameId)) {
-                    $stmt = $pdo->prepare("UPDATE games SET status = ? WHERE id = ?");
-                    if ($stmt->execute([$status, $gameId])) {
-                        $message = 'Game status updated successfully';
-                        $messageType = 'success';
+
+                $gameId = $security->validateInput($gameId, 'int');
+                $status = $security->validateInput($status, 'string', 20);
+
+                if ($gameId !== false && $status !== false && !empty($gameId)) {
+                    // Validate status value
+                    if (in_array($status, ['active', 'inactive'])) {
+                        $stmt = $pdo->prepare("UPDATE games SET status = ? WHERE id = ?");
+                        if ($stmt->execute([$status, $gameId])) {
+                            $message = 'Game status updated successfully';
+                            $messageType = 'success';
+                        } else {
+                            $message = 'Failed to update game status';
+                            $messageType = 'error';
+                        }
                     } else {
-                        $message = 'Failed to update game status';
+                        $message = 'Invalid status value';
                         $messageType = 'error';
                     }
+                } else {
+                    $message = 'Invalid input parameters';
+                    $messageType = 'error';
                 }
                 break;
         }

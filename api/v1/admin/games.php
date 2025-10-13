@@ -4,19 +4,22 @@
  * Admin Games Management API endpoints
  */
 
+// Initialize security middleware
+$security = new SecurityMiddleware($pdo);
+
 try {
     switch ($_SERVER['REQUEST_METHOD']) {
         case 'GET':
             handleGetGames($pdo);
             break;
         case 'POST':
-            handleCreateGame($pdo, $auth);
+            handleCreateGame($pdo, $auth, $security);
             break;
         case 'PUT':
-            handleUpdateGame($pdo);
+            handleUpdateGame($pdo, $security);
             break;
         case 'DELETE':
-            handleDeleteGame($pdo);
+            handleDeleteGame($pdo, $security);
             break;
         default:
             ResponseHandler::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
@@ -50,54 +53,73 @@ function handleGetGames($pdo)
 /**
  * Handle POST request - create new game
  */
-function handleCreateGame($pdo, $auth)
+function handleCreateGame($pdo, $auth, $security)
 {
     $input = json_decode(file_get_contents('php://input'), true);
 
-    // Validate input
+    if (!$input) {
+        ResponseHandler::error('Invalid JSON input', 'INVALID_JSON', 400);
+    }
+
+    // Validate required fields
     if (empty($input['name']) || empty($input['game_id'])) {
         ResponseHandler::error('Name and game_id are required', 'INVALID_INPUT', 400);
     }
 
+    // Validate and sanitize inputs
+    $name = $security->validateInput($input['name'], 'string', 100);
+    $gameId = $security->validateInput($input['game_id'], 'alphanumeric', 50);
+    $description = $security->validateInput($input['description'] ?? null, 'string', 1000);
+    $status = $security->validateInput($input['status'] ?? 'active', 'string', 20);
+
+    if ($name === false || $gameId === false || $description === false || $status === false) {
+        ResponseHandler::error('Invalid input format', 'INVALID_INPUT', 400);
+    }
+
+    // Validate status value
+    if (!in_array($status, ['active', 'inactive'])) {
+        ResponseHandler::error('Invalid status value', 'INVALID_STATUS', 400);
+    }
+
     // Check if game_id already exists
     $checkStmt = $pdo->prepare("SELECT id FROM games WHERE game_id = ?");
-    $checkStmt->execute([$input['game_id']]);
+    $checkStmt->execute([$gameId]);
     if ($checkStmt->fetch()) {
         ResponseHandler::error('Game ID already exists', 'GAME_ID_EXISTS', 409);
     }
 
     // Generate API key
     $apiKey = $auth->generateApiKey();
-    $hashedApiKey = hash('sha256', $apiKey);
+    $hashedApiKey = hash('sha384', $apiKey) . hash('ripemd160', $apiKey);
 
     // Insert new game
     $stmt = $pdo->prepare("
-        INSERT INTO games (name, game_id, api_key, description, status) 
+        INSERT INTO games (name, game_id, api_key, description, status)
         VALUES (?, ?, ?, ?, ?)
     ");
 
     $result = $stmt->execute([
-        $input['name'],
-        $input['game_id'],
+        $name,
+        $gameId,
         $hashedApiKey,
-        $input['description'] ?? null,
-        $input['status'] ?? 'active'
+        $description,
+        $status
     ]);
 
     if (!$result) {
         ResponseHandler::error('Failed to create game', 'CREATION_FAILED', 500);
     }
 
-    $gameId = $pdo->lastInsertId();
+    $gameDbId = $pdo->lastInsertId();
 
     // Return created game with API key (only time it's shown)
     $game = [
-        'id' => $gameId,
-        'name' => $input['name'],
-        'game_id' => $input['game_id'],
+        'id' => $gameDbId,
+        'name' => $name,
+        'game_id' => $gameId,
         'api_key' => $apiKey, // Return unhashed key for admin
-        'description' => $input['description'] ?? null,
-        'status' => $input['status'] ?? 'active',
+        'description' => $description,
+        'status' => $status,
         'created_at' => gmdate('c')
     ];
 
@@ -107,13 +129,23 @@ function handleCreateGame($pdo, $auth)
 /**
  * Handle PUT request - update game
  */
-function handleUpdateGame($pdo)
+function handleUpdateGame($pdo, $security)
 {
     $input = json_decode(file_get_contents('php://input'), true);
     $gameId = $_GET['id'] ?? null;
 
+    if (!$input) {
+        ResponseHandler::error('Invalid JSON input', 'INVALID_JSON', 400);
+    }
+
     if (empty($gameId)) {
         ResponseHandler::error('Game ID is required', 'INVALID_INPUT', 400);
+    }
+
+    // Validate game ID
+    $gameId = $security->validateInput($gameId, 'int');
+    if ($gameId === false) {
+        ResponseHandler::error('Invalid game ID', 'INVALID_INPUT', 400);
     }
 
     // Check if game exists
@@ -128,18 +160,30 @@ function handleUpdateGame($pdo)
     $updateValues = [];
 
     if (isset($input['name'])) {
+        $name = $security->validateInput($input['name'], 'string', 100);
+        if ($name === false) {
+            ResponseHandler::error('Invalid name format', 'INVALID_INPUT', 400);
+        }
         $updateFields[] = "name = ?";
-        $updateValues[] = $input['name'];
+        $updateValues[] = $name;
     }
 
     if (isset($input['description'])) {
+        $description = $security->validateInput($input['description'], 'string', 1000);
+        if ($description === false) {
+            ResponseHandler::error('Invalid description format', 'INVALID_INPUT', 400);
+        }
         $updateFields[] = "description = ?";
-        $updateValues[] = $input['description'];
+        $updateValues[] = $description;
     }
 
     if (isset($input['status'])) {
+        $status = $security->validateInput($input['status'], 'string', 20);
+        if ($status === false || !in_array($status, ['active', 'inactive'])) {
+            ResponseHandler::error('Invalid status value', 'INVALID_STATUS', 400);
+        }
         $updateFields[] = "status = ?";
-        $updateValues[] = $input['status'];
+        $updateValues[] = $status;
     }
 
     if (empty($updateFields)) {
@@ -162,12 +206,18 @@ function handleUpdateGame($pdo)
 /**
  * Handle DELETE request - delete game
  */
-function handleDeleteGame($pdo)
+function handleDeleteGame($pdo, $security)
 {
     $gameId = $_GET['id'] ?? null;
 
     if (empty($gameId)) {
         ResponseHandler::error('Game ID is required', 'INVALID_INPUT', 400);
+    }
+
+    // Validate game ID
+    $gameId = $security->validateInput($gameId, 'int');
+    if ($gameId === false) {
+        ResponseHandler::error('Invalid game ID', 'INVALID_INPUT', 400);
     }
 
     // Check if game exists
@@ -193,7 +243,12 @@ function handleDeleteGame($pdo)
  */
 function getConfigCount($pdo, $gameId)
 {
-    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM configurations WHERE game_id = ?");
+    static $stmt = null;
+
+    if ($stmt === null) {
+        $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM configurations WHERE game_id = ?");
+    }
+
     $stmt->execute([$gameId]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return (int)$result['count'];

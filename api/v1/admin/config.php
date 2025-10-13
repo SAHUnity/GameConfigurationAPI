@@ -4,19 +4,22 @@
  * Admin Configuration Management API endpoints
  */
 
+// Load utility functions
+require_once '../../../includes/UtilityFunctions.php';
+
 try {
     switch ($_SERVER['REQUEST_METHOD']) {
         case 'GET':
-            handleGetConfigurations($pdo);
+            handleGetConfigurations($pdo, $security);
             break;
         case 'POST':
-            handleCreateConfiguration($pdo);
+            handleCreateConfiguration($pdo, $security);
             break;
         case 'PUT':
-            handleUpdateConfiguration($pdo);
+            handleUpdateConfiguration($pdo, $security);
             break;
         case 'DELETE':
-            handleDeleteConfiguration($pdo);
+            handleDeleteConfiguration($pdo, $security);
             break;
         default:
             ResponseHandler::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
@@ -29,25 +32,29 @@ try {
 /**
  * Handle GET request - list configurations
  */
-function handleGetConfigurations($pdo)
+function handleGetConfigurations($pdo, $security)
 {
     $gameId = $_GET['game_id'] ?? null;
     $category = $_GET['category'] ?? null;
 
+    // Validate inputs
+    $gameId = $security->validateInput($gameId, 'int');
+    $category = $security->validateInput($category, 'string', 50);
+
     $sql = "
-        SELECT c.*, g.name as game_name, g.game_id 
-        FROM configurations c 
+        SELECT c.*, g.name as game_name, g.game_id
+        FROM configurations c
         JOIN games g ON c.game_id = g.id
         WHERE 1=1
     ";
     $params = [];
 
-    if ($gameId) {
+    if ($gameId && $gameId !== false) {
         $sql .= " AND c.game_id = ?";
         $params[] = $gameId;
     }
 
-    if ($category) {
+    if ($category && $category !== false) {
         $sql .= " AND c.category = ?";
         $params[] = $category;
     }
@@ -60,7 +67,12 @@ function handleGetConfigurations($pdo)
 
     // Decode JSON values for display
     foreach ($configs as &$config) {
-        $config['config_value'] = json_decode($config['config_value'], true);
+        $value = json_decode($config['config_value'], true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            $config['config_value'] = $value;
+        } else {
+            $config['config_value'] = null; // Handle invalid JSON
+        }
     }
 
     ResponseHandler::success($configs);
@@ -69,45 +81,67 @@ function handleGetConfigurations($pdo)
 /**
  * Handle POST request - create new configuration
  */
-function handleCreateConfiguration($pdo)
+function handleCreateConfiguration($pdo, $security)
 {
     $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!$input) {
+        ResponseHandler::error('Invalid JSON input', 'INVALID_JSON', 400);
+    }
 
     // Validate required fields
     if (empty($input['game_id']) || empty($input['config_key']) || !isset($input['config_value'])) {
         ResponseHandler::error('game_id, config_key, and config_value are required', 'INVALID_INPUT', 400);
     }
 
+    // Validate and sanitize inputs
+    $gameId = $security->validateInput($input['game_id'], 'int');
+    $configKey = $security->validateInput($input['config_key'], 'string', 255);
+    $category = $security->validateInput($input['category'] ?? 'general', 'string', 50);
+    $description = $security->validateInput($input['description'] ?? null, 'string', 1000);
+
+    if ($gameId === false || $configKey === false || $category === false || $description === false) {
+        ResponseHandler::error('Invalid input format', 'INVALID_INPUT', 400);
+    }
+
+    // Validate configuration key format
+    if (!$security->validateConfigKey($configKey)) {
+        ResponseHandler::error('Invalid configuration key format', 'INVALID_KEY', 400);
+    }
+
     // Validate game exists
     $gameStmt = $pdo->prepare("SELECT id FROM games WHERE id = ?");
-    $gameStmt->execute([$input['game_id']]);
+    $gameStmt->execute([$gameId]);
     if (!$gameStmt->fetch()) {
         ResponseHandler::error('Game not found', 'GAME_NOT_FOUND', 404);
     }
 
-    // Determine data type
+    // Determine data type and validate value
     $dataType = determineDataType($input['config_value']);
+    if (!$security->validateConfigValue($input['config_value'], $dataType)) {
+        ResponseHandler::error('Invalid configuration value for type ' . $dataType, 'INVALID_VALUE', 400);
+    }
 
     // Check if configuration already exists
     $checkStmt = $pdo->prepare("SELECT id FROM configurations WHERE game_id = ? AND config_key = ?");
-    $checkStmt->execute([$input['game_id'], $input['config_key']]);
+    $checkStmt->execute([$gameId, $configKey]);
     if ($checkStmt->fetch()) {
         ResponseHandler::error('Configuration key already exists for this game', 'CONFIG_EXISTS', 409);
     }
 
     // Insert configuration
     $stmt = $pdo->prepare("
-        INSERT INTO configurations (game_id, config_key, config_value, data_type, category, description) 
+        INSERT INTO configurations (game_id, config_key, config_value, data_type, category, description)
         VALUES (?, ?, ?, ?, ?, ?)
     ");
 
     $result = $stmt->execute([
-        $input['game_id'],
-        $input['config_key'],
+        $gameId,
+        $configKey,
         json_encode($input['config_value']),
         $dataType,
-        $input['category'] ?? 'general',
-        $input['description'] ?? null
+        $category,
+        $description
     ]);
 
     if (!$result) {
@@ -119,12 +153,12 @@ function handleCreateConfiguration($pdo)
     // Return created configuration
     $config = [
         'id' => $configId,
-        'game_id' => $input['game_id'],
-        'config_key' => $input['config_key'],
+        'game_id' => $gameId,
+        'config_key' => $configKey,
         'config_value' => $input['config_value'],
         'data_type' => $dataType,
-        'category' => $input['category'] ?? 'general',
-        'description' => $input['description'] ?? null,
+        'category' => $category,
+        'description' => $description,
         'created_at' => gmdate('c')
     ];
 
@@ -134,13 +168,23 @@ function handleCreateConfiguration($pdo)
 /**
  * Handle PUT request - update configuration
  */
-function handleUpdateConfiguration($pdo)
+function handleUpdateConfiguration($pdo, $security)
 {
     $input = json_decode(file_get_contents('php://input'), true);
     $configId = $_GET['id'] ?? null;
 
+    if (!$input) {
+        ResponseHandler::error('Invalid JSON input', 'INVALID_JSON', 400);
+    }
+
     if (empty($configId)) {
         ResponseHandler::error('Configuration ID is required', 'INVALID_INPUT', 400);
+    }
+
+    // Validate config ID
+    $configId = $security->validateInput($configId, 'int');
+    if ($configId === false) {
+        ResponseHandler::error('Invalid configuration ID', 'INVALID_INPUT', 400);
     }
 
     // Check if configuration exists
@@ -155,6 +199,11 @@ function handleUpdateConfiguration($pdo)
     $updateValues = [];
 
     if (isset($input['config_value'])) {
+        // Validate config value
+        if (!$security->validateConfigValue($input['config_value'], determineDataType($input['config_value']))) {
+            ResponseHandler::error('Invalid configuration value', 'INVALID_VALUE', 400);
+        }
+
         $updateFields[] = "config_value = ?";
         $updateValues[] = json_encode($input['config_value']);
 
@@ -164,13 +213,23 @@ function handleUpdateConfiguration($pdo)
     }
 
     if (isset($input['category'])) {
+        $category = $security->validateInput($input['category'], 'string', 50);
+        if ($category === false) {
+            ResponseHandler::error('Invalid category format', 'INVALID_INPUT', 400);
+        }
+
         $updateFields[] = "category = ?";
-        $updateValues[] = $input['category'];
+        $updateValues[] = $category;
     }
 
     if (isset($input['description'])) {
+        $description = $security->validateInput($input['description'], 'string', 1000);
+        if ($description === false) {
+            ResponseHandler::error('Invalid description format', 'INVALID_INPUT', 400);
+        }
+
         $updateFields[] = "description = ?";
-        $updateValues[] = $input['description'];
+        $updateValues[] = $description;
     }
 
     if (empty($updateFields)) {
@@ -193,12 +252,18 @@ function handleUpdateConfiguration($pdo)
 /**
  * Handle DELETE request - delete configuration
  */
-function handleDeleteConfiguration($pdo)
+function handleDeleteConfiguration($pdo, $security)
 {
     $configId = $_GET['id'] ?? null;
 
     if (empty($configId)) {
         ResponseHandler::error('Configuration ID is required', 'INVALID_INPUT', 400);
+    }
+
+    // Validate config ID
+    $configId = $security->validateInput($configId, 'int');
+    if ($configId === false) {
+        ResponseHandler::error('Invalid configuration ID', 'INVALID_INPUT', 400);
     }
 
     // Check if configuration exists
@@ -217,22 +282,4 @@ function handleDeleteConfiguration($pdo)
     }
 
     ResponseHandler::success(['message' => 'Configuration deleted successfully']);
-}
-
-/**
- * Determine data type of value
- */
-function determineDataType($value)
-{
-    if (is_bool($value)) {
-        return 'boolean';
-    } elseif (is_numeric($value)) {
-        return is_float($value) ? 'float' : 'number';
-    } elseif (is_array($value)) {
-        return 'array';
-    } elseif (is_object($value)) {
-        return 'object';
-    } else {
-        return 'string';
-    }
 }

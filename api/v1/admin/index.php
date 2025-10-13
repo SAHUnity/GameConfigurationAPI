@@ -4,10 +4,16 @@
  * Admin API Router for Game Configuration API
  */
 
+// Load required dependencies
+require_once '../../../includes/AuthMiddleware.php';
+require_once '../../../includes/SecurityMiddleware.php';
+require_once '../../../includes/UtilityFunctions.php';
+
+// Initialize auth middleware
+$authMiddleware = new AuthMiddleware($pdo);
+
 // Validate admin session
-if (!$auth->validateAdminSession()) {
-    ResponseHandler::error('Unauthorized', 'UNAUTHORIZED', 401);
-}
+$authMiddleware->requireAuth();
 
 // Get request path
 $pathParts = array_slice(explode('/', trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/')), 3);

@@ -2,18 +2,13 @@
 require_once '../config/config.php';
 require_once '../config/database.php';
 require_once '../includes/Auth.php';
+require_once '../includes/AuthMiddleware.php';
 
 // Check authentication
-$database = new Database();
+$database = Database::getInstance();
 $pdo = $database->getConnection();
-$auth = new Auth($pdo);
-
-if (!$auth->validateAdminSession()) {
-    header('Location: index.php');
-    exit;
-}
-
-$admin = $auth->getCurrentAdmin();
+$authMiddleware = new AuthMiddleware($pdo);
+$admin = $authMiddleware->requireAuth();
 
 // Get statistics
 $gamesCount = $pdo->query("SELECT COUNT(*) as count FROM games")->fetch(PDO::FETCH_ASSOC)['count'];

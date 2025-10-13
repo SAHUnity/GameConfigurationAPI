@@ -6,14 +6,17 @@
 class Auth
 {
     private $pdo;
+    private $security;
 
     /**
      * Constructor
      * @param PDO $pdo Database connection
+     * @param SecurityMiddleware $security Optional security middleware instance
      */
-    public function __construct($pdo)
+    public function __construct($pdo, $security = null)
     {
         $this->pdo = $pdo;
+        $this->security = $security ?: new SecurityMiddleware($pdo);
     }
 
     /**
@@ -27,7 +30,14 @@ class Auth
             return false;
         }
 
-        $hashedKey = hash('sha256', $apiKey);
+        // Validate API key format
+        if (!$this->security->validateInput($apiKey, 'alphanumeric', 128)) {
+            return false;
+        }
+
+        // Use multiple hashing methods for better security
+        $hashedKey = hash('sha384', $apiKey);
+        $hashedKey .= hash('ripemd160', $apiKey);
 
         try {
             $stmt = $this->pdo->prepare("SELECT id, game_id FROM games WHERE api_key = ? AND status = 'active'");
@@ -65,15 +75,31 @@ class Auth
     }
 
     /**
-     * Login admin user
+     * Login admin user with brute force protection
      * @param string $username Username
      * @param string $password Password
-     * @return bool True if login successful
+     * @return array [success, message, remainingAttempts, lockoutTime]
      */
     public function loginAdmin($username, $password)
     {
         if (empty($username) || empty($password)) {
-            return false;
+            return [false, 'Username and password are required', 0, 0];
+        }
+
+        // Validate inputs
+        $username = $this->security->validateInput($username, 'string', 50);
+        if (!$username) {
+            return [false, 'Invalid username format', 0, 0];
+        }
+
+        $identifier = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+        // Check brute force protection
+        list($allowed, $remainingAttempts, $lockoutTime) = $this->security->checkBruteForce($identifier);
+
+        if (!$allowed) {
+            $this->security->recordLoginAttempt($identifier, false, $username);
+            return [false, 'Too many failed attempts. Please try again later.', 0, $lockoutTime];
         }
 
         try {
@@ -82,6 +108,9 @@ class Auth
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($user && password_verify($password, $user['password'])) {
+                // Successful login
+                $this->security->recordLoginAttempt($identifier, true, $username);
+
                 if (session_status() === PHP_SESSION_NONE) {
                     session_start();
                 }
@@ -93,13 +122,16 @@ class Auth
                 $updateStmt = $this->pdo->prepare("UPDATE admin_users SET last_login = NOW() WHERE id = ?");
                 $updateStmt->execute([$user['id']]);
 
-                return true;
+                return [true, 'Login successful', 5, 0];
+            } else {
+                // Failed login
+                $this->security->recordLoginAttempt($identifier, false, $username);
+                $remainingAttempts = max(0, $remainingAttempts - 1);
+                return [false, 'Invalid username or password', $remainingAttempts, 0];
             }
-
-            return false;
         } catch (PDOException $e) {
             error_log("Admin login error: " . $e->getMessage());
-            return false;
+            return [false, 'Login system error', 0, 0];
         }
     }
 
@@ -117,12 +149,18 @@ class Auth
     }
 
     /**
-     * Generate secure API key
+     * Generate secure API key with better entropy
      * @return string Generated API key
      */
     public function generateApiKey()
     {
-        return bin2hex(random_bytes(32));
+        // Generate a more secure API key with timestamp and entropy
+        $entropy = random_bytes(32);
+        $timestamp = microtime(true);
+        $serverId = substr(md5(__FILE__), 0, 8);
+
+        $key = bin2hex($entropy) . dechex($timestamp) . $serverId;
+        return substr($key, 0, 64); // Ensure consistent length
     }
 
     /**

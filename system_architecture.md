@@ -1,7 +1,7 @@
 # Game Configuration API - System Architecture
 
 ## Overview
-A PHP-based API system for managing and distributing game configuration data to Unity clients, designed to run on cheap cPanel hosting with MySQL/MariaDB database.
+A secure, high-performance PHP-based API system for managing and distributing game configuration data, designed with enterprise-grade security features and optimized for production deployment.
 
 ## System Components
 
@@ -11,6 +11,7 @@ A PHP-based API system for managing and distributing game configuration data to 
 - `games` - Store game information and API keys
 - `configurations` - Store key-value configuration pairs
 - `admin_users` - Store admin panel user credentials
+- `login_attempts` - Track login attempts for brute force protection
 
 #### games Table Structure:
 ```sql
@@ -18,7 +19,7 @@ CREATE TABLE games (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     game_id VARCHAR(50) UNIQUE NOT NULL,
-    api_key VARCHAR(64) UNIQUE NOT NULL,
+    api_key VARCHAR(128) UNIQUE NOT NULL,
     description TEXT,
     status ENUM('active', 'inactive') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -55,12 +56,26 @@ CREATE TABLE admin_users (
 );
 ```
 
+#### login_attempts Table Structure:
+```sql
+CREATE TABLE login_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    identifier VARCHAR(255) NOT NULL,
+    success TINYINT(1) NOT NULL,
+    username VARCHAR(50),
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_identifier_created (identifier, created_at)
+);
+```
+
 ### 2. API Endpoints
 
 #### Configuration Retrieval Endpoints:
 - `GET /api/v1/config/{game_id}` - Get all configurations for a game
 - `GET /api/v1/config/{game_id}/{key}` - Get specific configuration key
-- `GET /api/v1/config/{game_id}/category/{category}` - Get configurations by category
+- `GET /api/v1/config/{game_id}?category={category}` - Get configurations by category
 
 #### Game Management Endpoints (Admin):
 - `POST /api/v1/admin/games` - Create new game
@@ -70,20 +85,23 @@ CREATE TABLE admin_users (
 
 #### Configuration Management Endpoints (Admin):
 - `POST /api/v1/admin/config` - Add/update configuration
+- `PUT /api/v1/admin/config/{id}` - Update configuration
 - `DELETE /api/v1/admin/config/{id}` - Delete configuration
-- `GET /api/v1/admin/config/{game_id}` - Get all configurations for a game
+- `GET /api/v1/admin/config` - List all configurations
 
 ### 3. Authentication System
 
 #### API Authentication:
-- Simple API key validation via HTTP header: `X-API-Key: {api_key}`
+- Strong API key validation via HTTP header: `X-API-Key: {api_key}`
 - OR as URL parameter: `?api_key={api_key}`
-- API keys stored as SHA-256 hashes in database
+- API keys stored as SHA384 + RIPEMD160 hashes in database
+- Rate limiting per IP address
 
 #### Admin Panel Authentication:
 - Session-based authentication with username/password
 - Passwords stored using password_hash() with bcrypt
-- Session timeout after 30 minutes of inactivity
+- Session timeout after configurable period (default 30 minutes)
+- Brute force protection with configurable limits
 
 ### 4. File Structure
 
@@ -93,8 +111,8 @@ CREATE TABLE admin_users (
 │   ├── v1/
 │   │   ├── index.php           # API router
 │   │   ├── config.php          # Configuration endpoints
-│   │   ├── games.php           # Game management endpoints
 │   │   └── admin/
+│   │       ├── index.php       # Admin API router
 │   │       ├── games.php       # Admin game management
 │   │       └── config.php      # Admin config management
 ├── admin/
@@ -104,17 +122,22 @@ CREATE TABLE admin_users (
 │   ├── configurations.php      # Configuration management
 │   └── logout.php              # Logout handler
 ├── config/
-│   ├── database.php            # Database configuration
+│   ├── database.php            # Database singleton class
 │   └── config.php              # Application configuration
 ├── includes/
-│   ├── functions.php           # Utility functions
-│   ├── auth.php                # Authentication helpers
-│   └── db.php                  # Database connection
+│   ├── Auth.php                # Authentication class
+│   ├── AuthMiddleware.php      # Authentication middleware
+│   ├── SecurityMiddleware.php  # Security middleware
+│   ├── RateLimiter.php         # Rate limiting class
+│   ├── ResponseHandler.php     # API response handler
+│   └── UtilityFunctions.php    # Shared utility functions
 ├── sql/
-│   └── schema.sql              # Database schema
-├── docs/
-│   ├── api_documentation.md    # API docs for Unity developers
-│   └── deployment_guide.md     # cPanel deployment guide
+│   ├── schema.sql              # Database schema
+│   └── login_attempts_table.sql # Login attempts table
+├── logs/                       # Application logs directory
+├── cache/                      # Cache directory
+├── rate_limits/                # Rate limiting data directory
+├── .env.example                # Environment configuration template
 └── .htaccess                   # URL rewriting rules
 ```
 
@@ -152,106 +175,111 @@ CREATE TABLE admin_users (
 ### 6. Security Measures
 
 #### Input Validation:
-- Validate all input data types and formats
-- Sanitize strings to prevent XSS
-- Validate JSON structure for configuration values
+- Comprehensive input validation using SecurityMiddleware
+- Type checking and length validation for all inputs
+- Sanitization of all user inputs
+- JSON structure validation for configuration values
 
 #### SQL Injection Prevention:
-- Use prepared statements for all database queries
+- All database queries use prepared statements
 - Parameter binding for all user input
+- Singleton database connection pattern
+
+#### Brute Force Protection:
+- Login attempt tracking with database table
+- Configurable limits and lockout times
+- IP-based and username-based tracking
 
 #### Rate Limiting:
-- Simple rate limiting based on IP address
-- Maximum 100 requests per minute per IP
+- File-based rate limiting with static caching
+- Configurable limits per IP address
+- Automatic cleanup of old rate limit files
 
-#### CORS Configuration:
-- Configure appropriate CORS headers for Unity WebGL builds
-- Allow specific domains or configure per-game access
+#### Authentication Security:
+- Strong API key hashing (SHA384 + RIPEMD160)
+- Secure password hashing with bcrypt
+- Session timeout management
+- Secure logout with session destruction
 
 ### 7. Admin Panel Features
 
 #### Dashboard:
 - Overview of all games and their status
-- Quick stats on configuration count
-- Recent activity log
+- Statistics on configuration count
+- Recent games and configurations
 
 #### Game Management:
-- Add/edit/delete games
+- Add/edit/delete games with validation
 - Generate/regenerate API keys
-- View game usage statistics
+- View game configuration count
 
 #### Configuration Management:
 - Add/edit/delete configuration key-value pairs
-- Bulk import/export configurations
-- Configuration history/backup
 - Category-based organization
+- Support for multiple data types (string, number, boolean, array, object)
 
-### 8. Deployment Considerations
+### 8. Performance Optimizations
 
-#### cPanel Requirements:
+#### Database Optimizations:
+- Singleton connection pattern with persistent connections
+- Prepared statements for all queries
+- Static statement caching for frequently used queries
+- Proper indexing on all tables
+
+#### Memory Optimizations:
+- Static caching for frequently used data
+- Optimized object creation patterns
+- Efficient resource management
+
+#### Processing Optimizations:
+- Streamlined JSON error handling
+- Optimized rate limiting with file path caching
+- Efficient input validation patterns
+
+### 9. Deployment Considerations
+
+#### Requirements:
 - PHP 7.4+ (preferably 8.0+)
 - MySQL/MariaDB database
 - mod_rewrite enabled for clean URLs
-- File upload permissions for admin panel
+- File permissions for cache, logs, and rate_limits directories
 
-#### Performance Optimizations:
-- Database indexing on frequently queried fields
-- Simple caching mechanism for frequently accessed configurations
-- Gzip compression for API responses
+#### Security Configuration:
+- Environment-based configuration
+- Secure file permissions
+- HTTPS/SSL certificate
+- Security headers
 
-### 9. Unity Integration Example
+## Architecture Patterns
 
-#### C# Script Example:
-```csharp
-using UnityEngine;
-using UnityEngine.Networking;
-using System.Collections;
+### Design Patterns Used:
+- **Singleton Pattern**: Database connections
+- **Middleware Pattern**: Authentication and security
+- **Factory Pattern**: Object creation where needed
+- **Dependency Injection**: Clean dependency management
 
-public class GameConfigManager : MonoBehaviour
-{
-    private string gameID = "your_game_id";
-    private string apiKey = "your_api_key";
-    private string apiURL = "https://your-domain.com/api/v1/config/";
-    
-    private void Start()
-    {
-        StartCoroutine(FetchConfiguration());
-    }
-    
-    IEnumerator FetchConfiguration()
-    {
-        string url = $"{apiURL}{gameID}";
-        UnityWebRequest request = UnityWebRequest.Get(url);
-        request.SetRequestHeader("X-API-Key", apiKey);
-        
-        yield return request.SendWebRequest();
-        
-        if (request.result == UnityWebRequest.Result.Success)
-        {
-            string jsonData = request.downloadHandler.text;
-            // Process configuration data
-            ProcessConfigurationData(jsonData);
-        }
-        else
-        {
-            Debug.LogError("Failed to fetch configuration: " + request.error);
-        }
-    }
-    
-    private void ProcessConfigurationData(string jsonData)
-    {
-        // Parse JSON and apply configurations
-        // Implementation depends on your game's needs
-    }
-}
-```
+### Performance Patterns:
+- **Static Caching**: For frequently used data
+- **Connection Pooling**: Database connections
+- **Resource Management**: Efficient cleanup
 
-## Implementation Phases
+## Security Architecture
 
-1. **Phase 1**: Database setup and core API endpoints
-2. **Phase 2**: Authentication system and security measures
-3. **Phase 3**: Admin panel development
-4. **Phase 4**: Documentation and deployment guides
-5. **Phase 5**: Testing and optimization
+### Defense in Depth:
+1. **Input Validation Layer**: Comprehensive validation and sanitization
+2. **Authentication Layer**: Strong authentication mechanisms
+3. **Authorization Layer**: Proper access control
+4. **Database Security Layer**: Prepared statements and connection security
+5. **Transport Layer**: HTTPS and secure headers
 
-This architecture provides a solid foundation for a scalable, secure game configuration system that works well with cPanel hosting constraints.
+### Security Features:
+- Brute force protection
+- Rate limiting
+- Input validation and sanitization
+- SQL injection prevention
+- XSS protection
+- Secure session management
+- Strong password hashing
+- API key security
+
+This architecture provides a robust, secure, and high-performance foundation for a game configuration system with enterprise-grade security features.

@@ -9,8 +9,19 @@ $gameId = $resource ?? null;
 $key = $id ?? null;
 $category = $_GET['category'] ?? null;
 
+// Validate and sanitize inputs
+$gameId = $security->validateInput($gameId, 'alphanumeric', 50);
+$key = $security->validateInput($key, 'string', 255);
+$category = $security->validateInput($category, 'string', 50);
+
 // Validate API key
 $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? null;
+$apiKey = $security->validateInput($apiKey, 'alphanumeric', 128);
+
+if (!$apiKey) {
+    ResponseHandler::error('Invalid API key format', 'INVALID_API_KEY', 401);
+}
+
 $game = $auth->validateApiKey($apiKey);
 
 if (!$game) {
@@ -51,30 +62,36 @@ function handleGetRequest($pdo, $game, $key, $category)
         }
 
         $value = json_decode($config['config_value'], true);
+        if ($value === null && json_decode($config['config_value']) !== null) {
+            ResponseHandler::error('Invalid configuration data', 'INVALID_DATA', 500);
+        }
+
         ResponseHandler::success([$config['config_key'] => $value]);
     } elseif ($category) {
         // Get configurations by category
-        $stmt = $pdo->prepare("SELECT config_key, config_value FROM configurations WHERE game_id = ? AND category = ?");
+        $stmt = $pdo->prepare("SELECT config_key, config_value FROM configurations WHERE game_id = ? AND category = ? ORDER BY config_key");
         $stmt->execute([$game['id'], $category]);
         $configs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $result = [];
         foreach ($configs as $config) {
-            $result[$config['config_key']] = json_decode($config['config_value'], true);
+            $value = json_decode($config['config_value'], true);
+            $result[$config['config_key']] = ($value !== null) ? $value : null;
         }
 
-        ResponseHandler::success($result, ['category' => $category]);
+        ResponseHandler::success($result, ['category' => $category, 'count' => count($result)]);
     } else {
         // Get all configurations for the game
-        $stmt = $pdo->prepare("SELECT config_key, config_value FROM configurations WHERE game_id = ?");
+        $stmt = $pdo->prepare("SELECT config_key, config_value FROM configurations WHERE game_id = ? ORDER BY category, config_key");
         $stmt->execute([$game['id']]);
         $configs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $result = [];
         foreach ($configs as $config) {
-            $result[$config['config_key']] = json_decode($config['config_value'], true);
+            $value = json_decode($config['config_value'], true);
+            $result[$config['config_key']] = ($value !== null) ? $value : null;
         }
 
-        ResponseHandler::success($result, ['game_id' => $game['game_id']]);
+        ResponseHandler::success($result, ['game_id' => $game['game_id'], 'count' => count($result)]);
     }
 }

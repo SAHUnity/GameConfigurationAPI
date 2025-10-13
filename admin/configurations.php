@@ -2,18 +2,16 @@
 require_once '../config/config.php';
 require_once '../config/database.php';
 require_once '../includes/Auth.php';
+require_once '../includes/AuthMiddleware.php';
+require_once '../includes/SecurityMiddleware.php';
+require_once '../includes/UtilityFunctions.php';
 
 // Check authentication
-$database = new Database();
+$database = Database::getInstance();
 $pdo = $database->getConnection();
-$auth = new Auth($pdo);
-
-if (!$auth->validateAdminSession()) {
-    header('Location: index.php');
-    exit;
-}
-
-$admin = $auth->getCurrentAdmin();
+$authMiddleware = new AuthMiddleware($pdo);
+$security = new SecurityMiddleware($pdo);
+$admin = $authMiddleware->requireAuth();
 
 // Handle form submissions
 $message = '';
@@ -23,38 +21,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
             case 'create':
-                $gameId = $_POST['game_id'] ?? '';
-                $configKey = $_POST['config_key'] ?? '';
-                $configValue = $_POST['config_value'] ?? '';
-                $dataType = $_POST['data_type'] ?? 'string';
-                $category = $_POST['category'] ?? 'general';
-                $description = $_POST['description'] ?? '';
+                // Validate input
+                $rules = [
+                    'game_id' => ['required' => true, 'type' => 'int'],
+                    'config_key' => ['required' => true, 'type' => 'string', 'max_length' => 255],
+                    'config_value' => ['required' => true, 'type' => 'json', 'max_length' => 65535],
+                    'data_type' => ['required' => true, 'type' => 'string', 'max_length' => 20],
+                    'category' => ['required' => false, 'type' => 'string', 'max_length' => 50, 'default' => 'general'],
+                    'description' => ['required' => false, 'type' => 'string', 'max_length' => 1000, 'default' => null]
+                ];
 
-                if (empty($gameId) || empty($configKey) || $configValue === '') {
-                    $message = 'Game, Key, and Value are required';
+                list($validated, $errors) = $authMiddleware->validateConfigInput($_POST, $rules);
+
+                if (!empty($errors)) {
+                    $message = 'Validation errors: ' . implode(', ', $errors);
                     $messageType = 'error';
                 } else {
                     // Convert value based on data type
-                    $processedValue = processConfigValue($configValue, $dataType);
+                    $processedValue = processConfigValue($validated['config_value'], $validated['data_type']);
 
-                    // Check if configuration already exists
-                    $checkStmt = $pdo->prepare("SELECT id FROM configurations WHERE game_id = ? AND config_key = ?");
-                    $checkStmt->execute([$gameId, $configKey]);
-                    if ($checkStmt->fetch()) {
-                        $message = 'Configuration key already exists for this game';
+                    // Validate key and value
+                    list($isValid, $error) = $authMiddleware->validateConfigKeyValue(
+                        $validated['config_key'],
+                        $processedValue,
+                        $validated['data_type']
+                    );
+
+                    if (!$isValid) {
+                        $message = $error;
                         $messageType = 'error';
                     } else {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO configurations (game_id, config_key, config_value, data_type, category, description) 
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        ");
-
-                        if ($stmt->execute([$gameId, $configKey, json_encode($processedValue), $dataType, $category, $description])) {
-                            $message = 'Configuration created successfully';
-                            $messageType = 'success';
-                        } else {
-                            $message = 'Failed to create configuration';
+                        // Check if configuration already exists
+                        $checkStmt = $pdo->prepare("SELECT id FROM configurations WHERE game_id = ? AND config_key = ?");
+                        $checkStmt->execute([$validated['game_id'], $validated['config_key']]);
+                        if ($checkStmt->fetch()) {
+                            $message = 'Configuration key already exists for this game';
                             $messageType = 'error';
+                        } else {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO configurations (game_id, config_key, config_value, data_type, category, description)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                            ");
+
+                            if ($stmt->execute([
+                                $validated['game_id'],
+                                $validated['config_key'],
+                                json_encode($processedValue),
+                                $validated['data_type'],
+                                $validated['category'],
+                                $validated['description']
+                            ])) {
+                                $message = 'Configuration created successfully';
+                                $messageType = 'success';
+                            } else {
+                                $message = 'Failed to create configuration';
+                                $messageType = 'error';
+                            }
                         }
                     }
                 }
@@ -62,15 +84,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'delete':
                 $configId = $_POST['config_id'] ?? '';
-                if (!empty($configId)) {
-                    $stmt = $pdo->prepare("DELETE FROM configurations WHERE id = ?");
-                    if ($stmt->execute([$configId])) {
-                        $message = 'Configuration deleted successfully';
-                        $messageType = 'success';
+                $configId = $security->validateInput($configId, 'int');
+
+                if ($configId !== false && !empty($configId)) {
+                    // Verify configuration exists
+                    $checkStmt = $pdo->prepare("SELECT id FROM configurations WHERE id = ?");
+                    $checkStmt->execute([$configId]);
+                    if ($checkStmt->fetch()) {
+                        $stmt = $pdo->prepare("DELETE FROM configurations WHERE id = ?");
+                        if ($stmt->execute([$configId])) {
+                            $message = 'Configuration deleted successfully';
+                            $messageType = 'success';
+                        } else {
+                            $message = 'Failed to delete configuration';
+                            $messageType = 'error';
+                        }
                     } else {
-                        $message = 'Failed to delete configuration';
+                        $message = 'Configuration not found';
                         $messageType = 'error';
                     }
+                } else {
+                    $message = 'Invalid configuration ID';
+                    $messageType = 'error';
                 }
                 break;
         }
@@ -111,21 +146,6 @@ $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Get categories for filter
 $categories = $pdo->query("SELECT DISTINCT category FROM configurations ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
 
-// Helper function to process configuration value
-function processConfigValue($value, $dataType)
-{
-    switch ($dataType) {
-        case 'boolean':
-            return $value === 'true' || $value === '1';
-        case 'number':
-            return is_numeric($value) ? (strpos($value, '.') !== false ? (float)$value : (int)$value) : 0;
-        case 'array':
-        case 'object':
-            return json_decode($value, true) ?: [];
-        default:
-            return (string)$value;
-    }
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">

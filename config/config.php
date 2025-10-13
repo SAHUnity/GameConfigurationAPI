@@ -4,19 +4,43 @@
  * Application configuration for Game Configuration API
  */
 
+// Load environment variables
+function loadEnvironmentVariables()
+{
+    if (file_exists(ROOT_PATH . '/.env')) {
+        $lines = file(ROOT_PATH . '/.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (strpos($line, '#') === 0) continue;
+            if (strpos($line, '=') === false) continue;
+
+            list($key, $value) = explode('=', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+
+            // Remove quotes if present
+            $value = trim($value, '"\'');
+
+            putenv("$key=$value");
+            $_ENV[$key] = $value;
+        }
+    }
+}
+
+loadEnvironmentVariables();
+
 // Application settings
 define('APP_NAME', 'Game Configuration API');
-define('APP_VERSION', '1.0.0');
+define('APP_VERSION', $_ENV['API_VERSION'] ?? '1.0.0');
 define('API_VERSION', 'v1');
 
 // Security settings
-define('JWT_SECRET', 'your-secret-key-change-this-in-production');
-define('SESSION_LIFETIME', 1800); // 30 minutes
-define('RATE_LIMIT_REQUESTS', 100);
-define('RATE_LIMIT_WINDOW', 60); // seconds
+define('JWT_SECRET', $_ENV['JWT_SECRET'] ?? 'change-this-secret-key-immediately');
+define('SESSION_LIFETIME', (int)($_ENV['SESSION_LIFETIME'] ?? 1800)); // 30 minutes
+define('RATE_LIMIT_REQUESTS', (int)($_ENV['RATE_LIMIT_REQUESTS'] ?? 100));
+define('RATE_LIMIT_WINDOW', (int)($_ENV['RATE_LIMIT_WINDOW'] ?? 60)); // seconds
 
 // API Settings
-define('CORS_ALLOWED_ORIGINS', '*'); // Restrict to your game domains in production
+define('CORS_ALLOWED_ORIGINS', $_ENV['CORS_ALLOWED_ORIGINS'] ?? '*'); // Restrict to your game domains in production
 define('API_RESPONSE_FORMAT', 'json');
 
 // File paths
