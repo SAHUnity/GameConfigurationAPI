@@ -4,6 +4,9 @@
 // Include API config to get database functions
 require_once __DIR__ . '/../../api/config.php';
 
+// Initialize database if needed (create tables and default admin user)
+initializeDatabase();
+
 // Require authentication for admin pages
 function requireLogin() {
     if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {

@@ -6,8 +6,10 @@ A PHP-based API for managing game configurations with an admin dashboard, design
 
 - RESTful API for fetching game configurations
 - Admin dashboard for managing games and configurations
-- Database-driven configuration storage
+- Database-driven configuration storage with active/inactive states
 - Secure authentication for admin access
+- Automatic database initialization
+- Support for multiple input methods (GET, POST, JSON body)
 - cPanel compatible structure
 
 ## Installation
@@ -24,7 +26,7 @@ A PHP-based API for managing game configurations with an admin dashboard, design
    - `DB_NAME` - Your database name
    - `ADMIN_USERNAME` - Admin username for the dashboard
    - `ADMIN_PASSWORD` - Admin password (will be hashed automatically)
-5. Run the SQL from `database/setup.sql` to create the required tables
+5. The database tables will be created automatically when you first access the API or admin panel
 6. Access the admin dashboard at `/admin/login.php`
 
 ### Setting Environment Variables in cPanel (Recommended for Security)
@@ -73,6 +75,26 @@ or
 GET /api/index.php?slug=GAME_SLUG
 ```
 
+or with POST:
+
+```
+POST /api/index.php
+Content-Type: application/x-www-form-urlencoded
+
+game_id=GAME_ID
+```
+
+or with JSON:
+
+```
+POST /api/index.php
+Content-Type: application/json
+
+{
+  "game_id": 1
+}
+```
+
 ### Example Response
 
 ```json
@@ -98,7 +120,9 @@ GET /api/index.php?slug=GAME_SLUG
 ## Security Notes
 
 - Change the default admin password after installation
-- For production, set ADMIN_PASSWORD via environment variable rather than hardcoding
+- For production, set ADMIN_PASSWORD via environment variable rather than using defaults
+- The API checks for active games and configurations before returning them
+- Input validation and sanitization is performed
 - Consider restricting access to the admin panel via IP whitelisting
 - Use HTTPS in production environments
 - Validate and sanitize all inputs
@@ -113,12 +137,12 @@ using UnityEngine;
 
 public class ConfigManager : MonoBehaviour
 {
-    [SerializeField] private string gameId = "your-game-slug";
+    [SerializeField] private string gameSlug = "your-game-slug";
     [SerializeField] private string apiUrl = "https://yoursite.com/api/index.php";
 
     private async void Start()
     {
-        var config = await GetGameConfig(gameId);
+        var config = await GetGameConfig(gameSlug);
         if (config != null)
         {
             // Use your configurations
@@ -136,10 +160,21 @@ public class ConfigManager : MonoBehaviour
         if (request.result == UnityWebRequest.Result.Success)
         {
             var json = request.downloadHandler.text;
-            // Parse JSON and return config dictionary
-            // Implementation depends on your JSON parsing solution
+            var response = JsonUtility.FromJson<ApiResponse>(json);
+            if (response.success)
+            {
+                return response.config;
+            }
         }
         return null;
+    }
+    
+    [System.Serializable]
+    private class ApiResponse
+    {
+        public bool success;
+        public string slug;
+        public Dictionary<string, string> config;
     }
 }
 ```
@@ -150,7 +185,7 @@ public class ConfigManager : MonoBehaviour
 GameConfigurationAPI/
 ├── api/                 # API endpoints
 │   ├── index.php       # Main API endpoint
-│   ├── config.php      # Database connection
+│   ├── config.php      # Database connection and initialization
 │   └── functions.php   # Helper functions
 ├── admin/              # Admin dashboard
 │   ├── index.php       # Dashboard home
@@ -158,16 +193,29 @@ GameConfigurationAPI/
 │   ├── logout.php      # Logout functionality
 │   ├── games.php       # Game management
 │   ├── configs.php     # Configuration management
-│   ├── assets/         # CSS, JS, Images
-│   └── includes/       # Common includes
+│   └── includes/       # Common includes (header.php, sidebar.php, functions.php)
 ├── database/           # Database setup files
-│   └── setup.sql       # Database schema
+│   └── setup.sql       # Database schema (for reference - tables auto-created)
 ├── config.php          # Main configuration file
-└── test.html           # Test page
+├── .env                # Environment variables (not in version control)
+├── .env.example        # Example environment variables file
+├── .htaccess           # Security and access rules
+├── test.html           # Frontend test page
+├── test_system.php     # Backend test script
+└── README.md           # This file
 ```
+
+## Testing
+
+To test the system functionality:
+1. Use the visual test page at `/test.html`
+2. Run the backend test script at `/test_system.php` (for developers)
 
 ## Troubleshooting
 
-- If you get "Database connection failed" errors, check your database configuration in `config.php`
-- Make sure the database user has appropriate permissions
-- Ensure all required PHP extensions are installed (PDO, MySQL)
+- If you get "Database connection failed" errors, check your database configuration in `.env` or environment variables
+- Make sure the database user has appropriate permissions (CREATE, SELECT, INSERT, UPDATE, DELETE)
+- Ensure all required PHP extensions are installed (PDO, MySQL, JSON)
+- Check that the database tables were created automatically by accessing the API or admin panel
+- If you get "Game not found" errors, ensure the game exists and is active in the admin panel
+- If you get "Configuration not found" errors, ensure configurations are added and marked as active

@@ -2,7 +2,11 @@
 session_start();
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../api/config.php'; // Include API config for database functions
 require_once __DIR__ . '/includes/functions.php';
+
+// Initialize database if needed (create tables and default admin user)
+initializeDatabase();
 
 // If already logged in, redirect to dashboard
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
