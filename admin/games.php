@@ -1,0 +1,246 @@
+<?php
+session_start();
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/includes/functions.php';
+
+requireLogin();
+
+$message = '';
+$error = '';
+
+// Handle form submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action'])) {
+        $pdo = getDBConnection();
+        
+        if ($_POST['action'] === 'add_game') {
+            $name = trim($_POST['name'] ?? '');
+            $slug = trim($_POST['slug'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+            
+            if (empty($name)) {
+                $error = 'Game name is required';
+            } else {
+                if (empty($slug)) {
+                    $slug = generateSlug($name);
+                }
+                
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO games (name, slug, description) VALUES (?, ?, ?)");
+                    $stmt->execute([$name, $slug, $description]);
+                    $message = 'Game added successfully';
+                } catch (PDOException $e) {
+                    if ($e->getCode() == 23000) { // Duplicate entry
+                        $error = 'A game with this slug already exists';
+                    } else {
+                        $error = 'Database error occurred';
+                    }
+                }
+            }
+        } elseif ($_POST['action'] === 'edit_game') {
+            $id = (int)($_POST['id'] ?? 0);
+            $name = trim($_POST['name'] ?? '');
+            $slug = trim($_POST['slug'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+            
+            if (empty($name) || $id <= 0) {
+                $error = 'Game name and valid ID are required';
+            } else {
+                // Only auto-generate slug if it was not provided in the form
+                if (empty($_POST['slug'])) {
+                    $slug = generateSlug($name);
+                }
+                
+                try {
+                    $stmt = $pdo->prepare("UPDATE games SET name=?, slug=?, description=? WHERE id=?");
+                    $stmt->execute([$name, $slug, $description, $id]);
+                    $message = 'Game updated successfully';
+                } catch (PDOException $e) {
+                    if ($e->getCode() == 23000) { // Duplicate entry
+                        $error = 'A game with this slug already exists';
+                    } else {
+                        $error = 'Database error occurred';
+                    }
+                }
+            }
+        } elseif ($_POST['action'] === 'delete_game') {
+            $id = (int)($_POST['id'] ?? 0);
+            
+            if ($id > 0) {
+                try {
+                    $stmt = $pdo->prepare("DELETE FROM games WHERE id=?");
+                    $stmt->execute([$id]);
+                    $message = 'Game deleted successfully';
+                } catch (PDOException $e) {
+                    $error = 'Database error occurred';
+                }
+            }
+        }
+    }
+}
+
+// Get all games
+$pdo = getDBConnection();
+$games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Games - <?php echo APP_NAME; ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <?php include 'includes/header.php'; ?>
+    
+    <div class="container-fluid">
+        <div class="row">
+            <?php include 'includes/sidebar.php'; ?>
+            
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Manage Games</h1>
+                </div>
+
+                <?php if ($message): ?>
+                    <div class="alert alert-success"><?php echo h($message); ?></div>
+                <?php endif; ?>
+                
+                <?php if ($error): ?>
+                    <div class="alert alert-danger"><?php echo h($error); ?></div>
+                <?php endif; ?>
+
+                <!-- Add Game Form -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Add New Game</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="">
+                            <input type="hidden" name="action" value="add_game">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="name" class="form-label">Game Name</label>
+                                        <input type="text" class="form-control" id="name" name="name" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="slug" class="form-label">Slug (URL-friendly)</label>
+                                        <input type="text" class="form-control" id="slug" name="slug" placeholder="Leave empty to auto-generate">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Add Game</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Games List -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Games List</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Slug</th>
+                                        <th>Description</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($games as $game): ?>
+                                    <tr>
+                                        <td><?php echo h($game['id']); ?></td>
+                                        <td><?php echo h($game['name']); ?></td>
+                                        <td><?php echo h($game['slug']); ?></td>
+                                        <td><?php echo h($game['description']); ?></td>
+                                        <td><?php echo h($game['created_at']); ?></td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $game['id']; ?>">Edit</button>
+                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?php echo $game['id']; ?>">Delete</button>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Edit Modal -->
+                                    <div class="modal fade" id="editModal<?php echo $game['id']; ?>" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Edit Game</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <form method="POST" action="">
+                                                    <input type="hidden" name="action" value="edit_game">
+                                                    <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                    <div class="modal-body">
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Game Name</label>
+                                                            <input type="text" class="form-control" name="name" value="<?php echo h($game['name']); ?>" required>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Slug</label>
+                                                            <input type="text" class="form-control" name="slug" value="<?php echo h($game['slug']); ?>">
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Description</label>
+                                                            <textarea class="form-control" name="description" rows="3"><?php echo h($game['description']); ?></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Delete Modal -->
+                                    <div class="modal fade" id="deleteModal<?php echo $game['id']; ?>" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Delete Game</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <form method="POST" action="">
+                                                    <input type="hidden" name="action" value="delete_game">
+                                                    <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                    <div class="modal-body">
+                                                        <p>Are you sure you want to delete the game "<?php echo h($game['name']); ?>"? This will also delete all configurations associated with this game.</p>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-danger">Delete</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
