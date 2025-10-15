@@ -169,7 +169,6 @@ $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
-                                        <th>ID</th>
                                         <th>Game</th>
                                         <th>Key</th>
                                         <th>Value</th>
@@ -182,7 +181,6 @@ $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
                                 <tbody>
                                     <?php foreach ($configs as $config): ?>
                                     <tr>
-                                        <td><?php echo h($config['id']); ?></td>
                                         <td><?php echo h($config['game_name'] ?? 'N/A'); ?></td>
                                         <td><?php echo h($config['config_key']); ?></td>
                                         <td><?php echo h(strlen($config['config_value']) > 50 ? substr($config['config_value'], 0, 50) . '...' : $config['config_value']); ?></td>
