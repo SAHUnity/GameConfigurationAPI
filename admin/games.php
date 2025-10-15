@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../api/functions.php'; // Include API functions to access generateApiKey
 
 requireLogin();
 
@@ -15,52 +16,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if ($_POST['action'] === 'add_game') {
             $name = trim($_POST['name'] ?? '');
-            $slug = trim($_POST['slug'] ?? '');
             $description = trim($_POST['description'] ?? '');
             
             if (empty($name)) {
                 $error = 'Game name is required';
             } else {
-                if (empty($slug)) {
-                    $slug = generateSlug($name);
-                }
+                // Generate a secure API key for the new game
+                $apiKey = generateApiKey();
                 
                 try {
-                    $stmt = $pdo->prepare("INSERT INTO games (name, slug, description) VALUES (?, ?, ?)");
-                    $stmt->execute([$name, $slug, $description]);
+                    $stmt = $pdo->prepare("INSERT INTO games (name, api_key, description) VALUES (?, ?, ?)");
+                    $stmt->execute([$name, $apiKey, $description]);
                     $message = 'Game added successfully';
                 } catch (PDOException $e) {
-                    if ($e->getCode() == 23000) { // Duplicate entry
-                        $error = 'A game with this slug already exists';
-                    } else {
-                        $error = 'Database error occurred';
-                    }
+                    $error = 'Database error occurred';
                 }
             }
         } elseif ($_POST['action'] === 'edit_game') {
             $id = (int)($_POST['id'] ?? 0);
             $name = trim($_POST['name'] ?? '');
-            $slug = trim($_POST['slug'] ?? '');
             $description = trim($_POST['description'] ?? '');
             
             if (empty($name) || $id <= 0) {
                 $error = 'Game name and valid ID are required';
             } else {
-                // Only auto-generate slug if it was not provided in the form
-                if (empty($_POST['slug'])) {
-                    $slug = generateSlug($name);
-                }
-                
                 try {
-                    $stmt = $pdo->prepare("UPDATE games SET name=?, slug=?, description=? WHERE id=?");
-                    $stmt->execute([$name, $slug, $description, $id]);
+                    $stmt = $pdo->prepare("UPDATE games SET name=?, description=? WHERE id=?");
+                    $stmt->execute([$name, $description, $id]);
                     $message = 'Game updated successfully';
                 } catch (PDOException $e) {
-                    if ($e->getCode() == 23000) { // Duplicate entry
-                        $error = 'A game with this slug already exists';
-                    } else {
-                        $error = 'Database error occurred';
-                    }
+                    $error = 'Database error occurred';
                 }
             }
         } elseif ($_POST['action'] === 'delete_game') {
@@ -75,13 +60,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'Database error occurred';
                 }
             }
+        } elseif ($_POST['action'] === 'regenerate_api_key') {
+            $id = (int)($_POST['id'] ?? 0);
+            
+            if ($id > 0) {
+                try {
+                    $newApiKey = generateApiKey();
+                    $stmt = $pdo->prepare("UPDATE games SET api_key = ? WHERE id = ?");
+                    $stmt->execute([$newApiKey, $id]);
+                    $message = 'API key regenerated successfully';
+                } catch (PDOException $e) {
+                    $error = 'Database error occurred';
+                }
+            }
         }
     }
 }
 
 // Get all games
 $pdo = getDBConnection();
-$games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
+$games = $pdo->query("SELECT id, name, api_key, description, created_at FROM games ORDER BY name")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -91,6 +89,20 @@ $games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Games - <?php echo APP_NAME; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        function showApiKey(apiKey, gameId) {
+            // Show the API key in an alert (in a real implementation, you might want a modal)
+            alert(`API Key for game ${gameId}: ${apiKey}\n\nIMPORTANT: Copy this key now as it will not be shown again.`);
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                alert('API key copied to clipboard!');
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+            });
+        }
+    </script>
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -120,19 +132,9 @@ $games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
                     <div class="card-body">
                         <form method="POST" action="">
                             <input type="hidden" name="action" value="add_game">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="name" class="form-label">Game Name</label>
-                                        <input type="text" class="form-control" id="name" name="name" required>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="slug" class="form-label">Slug (URL-friendly)</label>
-                                        <input type="text" class="form-control" id="slug" name="slug" placeholder="Leave empty to auto-generate">
-                                    </div>
-                                </div>
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Game Name</label>
+                                <input type="text" class="form-control" id="name" name="name" required>
                             </div>
                             <div class="mb-3">
                                 <label for="description" class="form-label">Description</label>
@@ -153,9 +155,8 @@ $games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
-                                        <th>ID</th>
                                         <th>Name</th>
-                                        <th>Slug</th>
+                                        <th>API Key</th>
                                         <th>Description</th>
                                         <th>Created</th>
                                         <th>Actions</th>
@@ -164,13 +165,21 @@ $games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
                                 <tbody>
                                     <?php foreach ($games as $game): ?>
                                     <tr>
-                                        <td><?php echo h($game['id']); ?></td>
                                         <td><?php echo h($game['name']); ?></td>
-                                        <td><?php echo h($game['slug']); ?></td>
+                                        <td>
+                                            <?php if ($game['api_key']): ?>
+                                                <span class="text-muted">••••••••</span>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showApiKey('<?php echo h($game['api_key']); ?>', <?php echo $game['id']; ?>)">View</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('<?php echo h($game['api_key']); ?>')">Copy</button>
+                                            <?php else: ?>
+                                                <span class="text-warning">No API key</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td><?php echo h($game['description']); ?></td>
                                         <td><?php echo h($game['created_at']); ?></td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $game['id']; ?>">Edit</button>
+                                            <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#regenerateModal<?php echo $game['id']; ?>">Regenerate Key</button>
                                             <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?php echo $game['id']; ?>">Delete</button>
                                         </td>
                                     </tr>
@@ -192,10 +201,6 @@ $games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
                                                             <input type="text" class="form-control" name="name" value="<?php echo h($game['name']); ?>" required>
                                                         </div>
                                                         <div class="mb-3">
-                                                            <label class="form-label">Slug</label>
-                                                            <input type="text" class="form-control" name="slug" value="<?php echo h($game['slug']); ?>">
-                                                        </div>
-                                                        <div class="mb-3">
                                                             <label class="form-label">Description</label>
                                                             <textarea class="form-control" name="description" rows="3"><?php echo h($game['description']); ?></textarea>
                                                         </div>
@@ -203,6 +208,32 @@ $games = $pdo->query("SELECT * FROM games ORDER BY name")->fetchAll();
                                                     <div class="modal-footer">
                                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                                                         <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Regenerate API Key Modal -->
+                                    <div class="modal fade" id="regenerateModal<?php echo $game['id']; ?>" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Regenerate API Key</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <form method="POST" action="">
+                                                    <input type="hidden" name="action" value="regenerate_api_key">
+                                                    <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                    <div class="modal-body">
+                                                        <p>Are you sure you want to regenerate the API key for "<?php echo h($game['name']); ?>"? This will change the API key and all applications using the old key will need to be updated.</p>
+                                                        <div class="alert alert-warning">
+                                                            <strong>Warning:</strong> After regenerating the API key, all game clients that use this key will need to be updated with the new key.
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-danger">Regenerate Key</button>
                                                     </div>
                                                 </form>
                                             </div>

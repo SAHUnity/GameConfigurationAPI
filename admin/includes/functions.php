@@ -19,11 +19,3 @@ function requireLogin() {
 function h($text) {
     return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 }
-
-// Generate slug from name
-function generateSlug($name) {
-    $name = strtolower($name);
-    $name = preg_replace('/[^a-z0-9\s-]/', '', $name);
-    $name = preg_replace('/[\s-]+/', '-', $name);
-    return trim($name, '-');
-}

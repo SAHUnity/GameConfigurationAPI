@@ -63,16 +63,17 @@ The system is designed to work with subdomains and subdirectories:
 
 ## API Usage
 
-### Get Game Configuration
+### Get Game Configuration (Secure API Key Authentication)
 
 ```
-GET /api/index.php?game_id=GAME_ID
+GET /api/index.php?api_key=YOUR_API_KEY
 ```
 
-or
+or with X-API-Key header (recommended for security):
 
 ```
-GET /api/index.php?slug=GAME_SLUG
+GET /api/index.php
+X-API-Key: YOUR_API_KEY
 ```
 
 or with POST:
@@ -81,7 +82,7 @@ or with POST:
 POST /api/index.php
 Content-Type: application/x-www-form-urlencoded
 
-game_id=GAME_ID
+api_key=YOUR_API_KEY
 ```
 
 or with JSON:
@@ -91,7 +92,7 @@ POST /api/index.php
 Content-Type: application/json
 
 {
-  "game_id": 1
+  "api_key": "YOUR_API_KEY"
 }
 ```
 
@@ -100,8 +101,6 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "game_id": 1,
-  "slug": "sample-game",
   "config": {
     "difficulty": "normal",
     "max_players": "4",
@@ -137,12 +136,12 @@ using UnityEngine;
 
 public class ConfigManager : MonoBehaviour
 {
-    [SerializeField] private string gameSlug = "your-game-slug";
+    [SerializeField] private string apiKey = "your-api-key";
     [SerializeField] private string apiUrl = "https://yoursite.com/api/index.php";
 
     private async void Start()
     {
-        var config = await GetGameConfig(gameSlug);
+        var config = await GetGameConfig();
         if (config != null)
         {
             // Use your configurations
@@ -150,9 +149,9 @@ public class ConfigManager : MonoBehaviour
         }
     }
 
-    private async Task<Dictionary<string, string>> GetGameConfig(string gameSlug)
+    private async Task<Dictionary<string, string>> GetGameConfig()
     {
-        var request = UnityWebRequest.Get($"{apiUrl}?slug={gameSlug}");
+        var request = UnityWebRequest.Get($"{apiUrl}?api_key={apiKey}");
         var op = request.SendWebRequest();
 
         while (!op.isDone) await Task.Yield();
@@ -173,7 +172,6 @@ public class ConfigManager : MonoBehaviour
     private class ApiResponse
     {
         public bool success;
-        public string slug;
         public Dictionary<string, string> config;
     }
 }

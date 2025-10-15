@@ -1,4 +1,4 @@
-<nav class="navbar navbar-expand navbar-dark bg-dark static-top">
+<nav class="navbar navbar-expand navbar-dark bg-dark static-top ps-3">
     <a class="navbar-brand me-4" href="./index.php"><?php echo APP_NAME; ?></a>
     
     <button id="sidebarToggle" class="btn btn-link btn-sm rounded-circle me-3">

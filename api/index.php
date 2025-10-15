@@ -3,7 +3,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *'); // Adjust as needed for security
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
 
 // Include config and database connection
 require_once __DIR__ . '/../config.php';
@@ -18,117 +18,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// Function to get game configuration
-function getGameConfig($gameId, $gameSlug = null) {
+// Function to get game configuration by API key
+function getGameConfigByApiKey($apiKey) {
     $pdo = getDBConnection();
     
     try {
-        // If we have a slug, get the game ID first
-        if ($gameId === null && $gameSlug !== null) {
-            $stmt = $pdo->prepare("SELECT id FROM games WHERE slug = ? AND is_active = 1");
-            $stmt->execute([$gameSlug]);
-            $result = $stmt->fetch();
-            if (!$result) {
-                return null;
-            }
-            $gameId = $result['id'];
-        }
-        
         // Get active configurations for the game (ensure game is also active)
         $stmt = $pdo->prepare("
-            SELECT c.config_key, c.config_value 
+            SELECT c.config_key, c.config_value
             FROM configurations c
             JOIN games g ON c.game_id = g.id
-            WHERE c.game_id = ? AND c.is_active = 1 AND g.is_active = 1
+            WHERE g.api_key = ? AND c.is_active = 1 AND g.is_active = 1
             ORDER BY c.config_key
         ");
-        $stmt->execute([$gameId]);
+        $stmt->execute([$apiKey]);
         
         $configs = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        return $configs;
+        
+        if (empty($configs)) {
+            return null;
+        }
+        
+        return [
+            'configs' => $configs
+        ];
     } catch (PDOException $e) {
-        error_log("Database error in getGameConfig: " . $e->getMessage());
+        error_log("Database error in getGameConfigByApiKey: " . $e->getMessage());
         return false;
     }
 }
 
 // Main API logic
 try {
-    $gameId = null;
-    $gameSlug = null;
+    $apiKey = null;
     
-    // Determine how the game is identified
-    if (isset($_GET['game_id']) && is_numeric($_GET['game_id'])) {
-        $gameId = (int)$_GET['game_id'];
-    } elseif (isset($_GET['slug'])) {
-        $gameSlug = trim($_GET['slug']);
-        // Validate slug format - only alphanumeric, hyphens, and underscores
-        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $gameSlug)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid slug format']);
-            exit();
-        }
-    } elseif (isset($_POST['game_id']) && is_numeric($_POST['game_id'])) {
-        $gameId = (int)$_POST['game_id'];
-    } elseif (isset($_POST['slug'])) {
-        $gameSlug = trim($_POST['slug']);
-        // Validate slug format - only alphanumeric, hyphens, and underscores
-        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $gameSlug)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid slug format']);
-            exit();
-        }
+    // Determine how the API key is provided
+    if (isset($_GET['api_key'])) {
+        $apiKey = trim($_GET['api_key']);
+    } elseif (isset($_SERVER['HTTP_X_API_KEY'])) {
+        $apiKey = trim($_SERVER['HTTP_X_API_KEY']);
+    } elseif (isset($_POST['api_key'])) {
+        $apiKey = trim($_POST['api_key']);
     } else {
-        // Check for game identifier in request body (for POST requests with JSON)
+        // Check for API key in request body (for POST requests with JSON)
         $input = json_decode(file_get_contents('php://input'), true);
-        if (isset($input['game_id']) && is_numeric($input['game_id'])) {
-            $gameId = (int)$input['game_id'];
-        } elseif (isset($input['slug'])) {
-            $gameSlug = trim($input['slug']);
-            // Validate slug format - only alphanumeric, hyphens, and underscores
-            if (!preg_match('/^[a-zA-Z0-9_-]+$/', $gameSlug)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Invalid slug format']);
-                exit();
-            }
+        if (isset($input['api_key'])) {
+            $apiKey = trim($input['api_key']);
         }
     }
     
-    if ($gameId === null && $gameSlug === null) {
+    if ($apiKey === null || empty($apiKey)) {
         http_response_code(400);
-        echo json_encode(['error' => 'Missing game identifier. Use game_id or slug parameter.']);
+        echo json_encode(['error' => 'Missing API key. Use api_key parameter or X-API-Key header.']);
         exit();
     }
     
-    $config = getGameConfig($gameId, $gameSlug);
+    $result = getGameConfigByApiKey($apiKey);
     
-    if ($config === false) {
+    if ($result === false) {
         http_response_code(500);
         echo json_encode(['error' => 'Database error occurred']);
         exit();
     }
     
-    if ($config === null) {
+    if ($result === null) {
         http_response_code(404);
-        echo json_encode(['error' => 'Game not found']);
+        echo json_encode(['error' => 'Game not found or API key is invalid']);
         exit();
     }
     
-    // Get the game slug if it wasn't provided but game_id was
-    if ($gameSlug === null && $gameId !== null) {
-        $pdo = getDBConnection();
-        $stmt = $pdo->prepare("SELECT slug FROM games WHERE id = ?");
-        $stmt->execute([$gameId]);
-        $game = $stmt->fetch();
-        $gameSlug = $game ? $game['slug'] : null;
-    }
-    
-    // Success response
+    // Success response - only return the config data
     echo json_encode([
         'success' => true,
-        'game_id' => $gameId,
-        'slug' => $gameSlug,
-        'config' => $config
+        'config' => $result['configs']
     ]);
     
 } catch (Exception $e) {

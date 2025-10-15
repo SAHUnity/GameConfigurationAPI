@@ -23,6 +23,20 @@ function sanitizeInput($input) {
     }
 }
 
+// Function to generate a secure API key
+function generateApiKey($length = 32) {
+    // Using a combination of letters, numbers, and symbols for security
+    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*';
+    $key = '';
+    $charLength = strlen($characters);
+    
+    for ($i = 0; $i < $length; $i++) {
+        $key .= $characters[random_int(0, $charLength - 1)];
+    }
+    
+    return $key;
+}
+
 // Function to log API requests (optional)
 function logApiRequest($endpoint, $params, $responseCode) {
     $logEntry = [

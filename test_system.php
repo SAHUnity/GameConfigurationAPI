@@ -21,6 +21,7 @@ if (file_exists(__DIR__ . '/config.php')) {
 echo "<h3>Test 2: Database Connection</h3>\n";
 if (file_exists(__DIR__ . '/api/config.php')) {
     require_once __DIR__ . '/api/config.php';
+    require_once __DIR__ . '/api/functions.php';
     
     try {
         $pdo = getDBConnection();
@@ -41,9 +42,10 @@ if (file_exists(__DIR__ . '/api/config.php')) {
 // Test 3: Test data insertion
 echo "<h3>Test 3: Test Data Operations</h3>\n";
 try {
-    // Insert a test game
-    $stmt = $pdo->prepare("INSERT INTO games (name, slug, description) VALUES (?, ?, ?)");
-    $stmt->execute(['Test Game', 'test-game', 'A test game for API verification']);
+    // Generate API key and insert a test game
+    $apiKey = generateApiKey();
+    $stmt = $pdo->prepare("INSERT INTO games (name, api_key, description) VALUES (?, ?, ?)");
+    $stmt->execute(['Test Game', $apiKey, 'A test game for API verification']);
     $gameId = $pdo->lastInsertId();
     echo "<p style='color: green;'>✓ Test game inserted with ID: $gameId</p>\n";
     
@@ -57,33 +59,35 @@ try {
     echo "<p style='color: red;'>✗ Test data insertion failed: " . $e->getMessage() . "</p>\n";
 }
 
-// Test 4: API functionality simulation
+// Test 4: API functionality simulation with new API key method
 echo "<h3>Test 4: API Functionality Simulation</h3>\n";
+// We need to test the function without including the main API file which runs the logic
 try {
-    // Simulate API call
-    $gameConfigs = getGameConfig($gameId);
-    if ($gameConfigs !== false && $gameConfigs !== null) {
-        echo "<p style='color: green;'>✓ API function working correctly</p>\n";
-        echo "<p>Retrieved configurations: " . json_encode($gameConfigs) . "</p>\n";
+    // Simulate API call with API key
+    $result = getGameConfigByApiKey($apiKey);
+    if ($result !== false && $result !== null) {
+        echo "<p style='color: green;'>✓ New API function working correctly</p>\n";
+        echo "<p>Retrieved configurations: " . json_encode($result['configs']) . "</p>\n";
     } else {
-        echo "<p style='color: red;'>✗ API function returned null or false</p>\n";
+        echo "<p style='color: red;'>✗ New API function returned null or false</p>\n";
     }
 } catch (Exception $e) {
-    echo "<p style='color: red;'>✗ API function error: " . $e->getMessage() . "</p>\n";
+    echo "<p style='color: red;'>✗ New API function error: " . $e->getMessage() . "</p>\n";
 }
 
 // Test 5: Admin functions
 echo "<h3>Test 5: Admin Functions</h3>\n";
 if (file_exists(__DIR__ . '/admin/includes/functions.php')) {
     require_once __DIR__ . '/admin/includes/functions.php';
+    require_once __DIR__ . '/api/functions.php';
     echo "<p style='color: green;'>✓ Admin functions loaded successfully</p>\n";
     
-    // Test slug generation
-    $testSlug = generateSlug("My Great Game 2023!");
-    if ($testSlug === "my-great-game-2023") {
-        echo "<p style='color: green;'>✓ Slug generation working: $testSlug</p>\n";
+    // Test API key generation instead of slug generation
+    $testApiKey = generateApiKey();
+    if (strlen($testApiKey) >= 32) {
+        echo "<p style='color: green;'>✓ API Key generation working: " . substr($testApiKey, 0, 10) . "...</p>\n";
     } else {
-        echo "<p style='color: red;'>✗ Slug generation failed: $testSlug</p>\n";
+        echo "<p style='color: red;'>✗ API Key generation failed: $testApiKey</p>\n";
     }
 } else {
     echo "<p style='color: red;'>✗ Admin functions file not found</p>\n";

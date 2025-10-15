@@ -49,7 +49,7 @@ function initializeDatabase() {
             "games" => "CREATE TABLE IF NOT EXISTS games (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
-                slug VARCHAR(255) UNIQUE NOT NULL,
+                api_key VARCHAR(64) UNIQUE NOT NULL,
                 description TEXT,
                 is_active TINYINT(1) DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -82,6 +82,13 @@ function initializeDatabase() {
             $pdo->exec($sql);
         }
         
+        // Remove slug column if it exists
+        try {
+            $pdo->exec("ALTER TABLE games DROP COLUMN slug");
+        } catch (PDOException $e) {
+            // Column may not exist, continue
+        }
+        
         // Insert default admin user if none exists
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
         $stmt->execute([ADMIN_USERNAME]);
@@ -89,6 +96,20 @@ function initializeDatabase() {
             $defaultPasswordHash = password_hash(ADMIN_PASSWORD, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)");
             $stmt->execute([ADMIN_USERNAME, $defaultPasswordHash, 'admin@example.com']);
+        }
+        
+        // Generate API keys for existing games that don't have them
+        $stmt = $pdo->prepare("SELECT id FROM games WHERE api_key IS NULL OR api_key = ''");
+        $stmt->execute();
+        $gamesWithoutApiKey = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        if (count($gamesWithoutApiKey) > 0) {
+            require_once __DIR__ . '/functions.php';
+            foreach ($gamesWithoutApiKey as $gameId) {
+                $apiKey = generateApiKey();
+                $stmt = $pdo->prepare("UPDATE games SET api_key = ? WHERE id = ?");
+                $stmt->execute([$apiKey, $gameId]);
+            }
         }
         
     } catch (PDOException $e) {
