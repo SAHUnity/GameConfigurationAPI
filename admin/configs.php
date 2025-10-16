@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([
                         sanitizeInput($gameId, 'int'), 
                         sanitizeInput($key), 
-                        sanitizeInput($value), 
+                        sanitizeConfigValue($value), // Use special sanitization that preserves JSON formatting
                         sanitizeInput($description), 
                         sanitizeInput($isActive, 'int')
                     ]);
@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([
                         sanitizeInput($gameId, 'int'), 
                         sanitizeInput($key), 
-                        sanitizeInput($value), 
+                        sanitizeConfigValue($value), // Use special sanitization that preserves JSON formatting
                         sanitizeInput($description), 
                         sanitizeInput($isActive, 'int'),
                         sanitizeInput($id, 'int')

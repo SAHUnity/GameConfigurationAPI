@@ -76,6 +76,15 @@ function sanitizeInput($input, $type = 'string') {
     }
 }
 
+// Function to sanitize configuration values specifically (preserving JSON formatting)
+function sanitizeConfigValue($value) {
+    // Remove any potential script tags but preserve JSON formatting
+    $value = strip_tags($value, '<br><br/><p><div><span><strong><em><b><i>'); // Allow some safe HTML tags if needed
+    
+    // Return without htmlspecialchars to preserve quotes and JSON structure
+    return trim($value);
+}
+
 // Enhanced function to generate a secure API key
 function generateApiKey($length = 32) {
     // Using a more secure random approach
