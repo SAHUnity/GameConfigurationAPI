@@ -1,10 +1,14 @@
 <?php
-session_start();
-
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
 
-// Check if user is logged in
+// Security headers
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+
+// Check if user is logged in - this will also validate the session
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
     exit();

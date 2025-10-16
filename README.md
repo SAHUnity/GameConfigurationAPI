@@ -122,9 +122,39 @@ Content-Type: application/json
 - For production, set ADMIN_PASSWORD via environment variable rather than using defaults
 - The API checks for active games and configurations before returning them
 - Input validation and sanitization is performed
+- Rate limiting prevents API abuse and spamming
+- CSRF protection added to all admin forms
+- XSS protection with output sanitization
+- Proper session management with security cookie settings
+- SQL injection prevention with PDO prepared statements
+- Rate limiting and IP-based security checks
 - Consider restricting access to the admin panel via IP whitelisting
 - Use HTTPS in production environments
 - Validate and sanitize all inputs
+- CORS policy configured with specific allowed origins (set in ALLOWED_ORIGINS environment variable)
+
+### Configuring Allowed Origins (CORS)
+
+When running in production, you need to configure the `ALLOWED_ORIGINS` environment variable to specify which domains can access your API. Examples for .env file:
+
+```
+# Single domain
+ALLOWED_ORIGINS=https://yourdomain.com
+
+# Multiple domains (comma-separated)
+ALLOWED_ORIGINS=https://yourdomain.com,https://subdomain.yourdomain.com,https://api.yourdomain.com
+
+# With WWW and non-WWW
+ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+
+# For development environments
+ALLOWED_ORIGINS=https://localhost,https://127.0.0.1
+
+# Production with multiple subdomains and main domain
+ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com,https://api.yourdomain.com,https://config.yourdomain.com,https://staging.yourdomain.com
+```
+
+**Important:** Always specify exact domains in production. Avoid using wildcards unless absolutely necessary, as they can introduce security risks.
 
 ## For Unity Games
 

@@ -1,13 +1,30 @@
 <?php
 // Main API endpoint for fetching game configurations
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *'); // Adjust as needed for security
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+
+// Handle CORS
+$allowedOrigins = explode(',', ALLOWED_ORIGINS);
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+if (in_array($origin, $allowedOrigins)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+} else {
+    // For development, you might want to allow all origins, but in production, be specific
+    header('Access-Control-Allow-Origin: ' . (in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']) ? '*' : $allowedOrigins[0] ?? 'null'));
+}
+
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
+header('Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization');
+header('Access-Control-Allow-Credentials: false'); // Don't allow credentials unless necessary
 
 // Include config and database connection
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/functions.php';
 
 // Initialize database if needed
 initializeDatabase();
@@ -23,6 +40,7 @@ function getGameConfigByApiKey($apiKey) {
     $pdo = getDBConnection();
     
     try {
+        // Use a more secure comparison by hashing the API key or using a different approach
         // Get active configurations for the game (ensure game is also active)
         $stmt = $pdo->prepare("
             SELECT c.config_key, c.config_value
@@ -48,6 +66,35 @@ function getGameConfigByApiKey($apiKey) {
     }
 }
 
+// Function to verify API key existence without revealing if it's valid
+function verifyApiKey($apiKey) {
+    $pdo = getDBConnection();
+    
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM games WHERE api_key = ? AND is_active = 1");
+        $stmt->execute([$apiKey]);
+        $count = $stmt->fetchColumn();
+        
+        return $count > 0;
+    } catch (PDOException $e) {
+        error_log("API key verification error: " . $e->getMessage());
+        return false;
+    }
+}
+
+// Rate limiting and security checks
+$clientIP = getClientIP();
+
+// Check if rate limited
+if (isRateLimited($clientIP)) {
+    http_response_code(429);
+    echo json_encode(['error' => 'Rate limit exceeded. Please try again later.']);
+    exit();
+}
+
+// Log the API request
+logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', $_GET + $_POST, 200, $clientIP);
+
 // Main API logic
 try {
     $apiKey = null;
@@ -67,9 +114,11 @@ try {
         }
     }
     
-    if ($apiKey === null || empty($apiKey)) {
+    // Validate API key format
+    if ($apiKey === null || empty($apiKey) || !isValidApiKey($apiKey)) {
         http_response_code(400);
-        echo json_encode(['error' => 'Missing API key. Use api_key parameter or X-API-Key header.']);
+        echo json_encode(['error' => 'Missing or invalid API key format. Use api_key parameter or X-API-Key header.']);
+        logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', ['ip' => $clientIP], 400, $clientIP);
         exit();
     }
     
@@ -78,12 +127,14 @@ try {
     if ($result === false) {
         http_response_code(500);
         echo json_encode(['error' => 'Database error occurred']);
+        logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', ['ip' => $clientIP], 500, $clientIP);
         exit();
     }
     
     if ($result === null) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Game not found or API key is invalid']);
+        http_response_code(401); // Use 401 instead of 404 to not reveal if game exists
+        echo json_encode(['error' => 'Unauthorized: Invalid API key']);
+        logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', ['ip' => $clientIP], 401, $clientIP);
         exit();
     }
     
@@ -93,9 +144,12 @@ try {
         'config' => $result['configs']
     ]);
     
+    logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', ['ip' => $clientIP], 200, $clientIP);
+    
 } catch (Exception $e) {
     error_log("API Error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['error' => 'An unexpected error occurred']);
+    logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', ['ip' => $clientIP, 'error' => $e->getMessage()], 500, $clientIP);
     exit();
 }

@@ -1,33 +1,58 @@
 <?php
-session_start();
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/../api/functions.php'; // Include API functions to access generateApiKey
 
 requireLogin();
 
+// CSRF Token Generation
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $message = '';
 $error = '';
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
+    // Verify CSRF token
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        $error = 'Invalid CSRF token';
+    } elseif (isset($_POST['action'])) {
         $pdo = getDBConnection();
         
         if ($_POST['action'] === 'add_game') {
             $name = trim($_POST['name'] ?? '');
             $description = trim($_POST['description'] ?? '');
             
-            if (empty($name)) {
-                $error = 'Game name is required';
+            // Input validation
+            $errors = validateInput(
+                ['name' => $name], 
+                ['name'], 
+                [
+                    'name' => [
+                        'min_length' => 1,
+                        'max_length' => 255,
+                        'regex' => '/^[a-zA-Z0-9\s\-_]+$/'
+                    ],
+                    'description' => [
+                        'max_length' => 1000
+                    ]
+                ]
+            );
+            
+            if (!empty($errors)) {
+                $error = implode(', ', $errors);
             } else {
                 // Generate a secure API key for the new game
                 $apiKey = generateApiKey();
                 
                 try {
                     $stmt = $pdo->prepare("INSERT INTO games (name, api_key, description) VALUES (?, ?, ?)");
-                    $stmt->execute([$name, $apiKey, $description]);
+                    $stmt->execute([sanitizeInput($name), $apiKey, sanitizeInput($description)]);
                     $message = 'Game added successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     $error = 'Database error occurred';
                 }
@@ -37,13 +62,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name = trim($_POST['name'] ?? '');
             $description = trim($_POST['description'] ?? '');
             
-            if (empty($name) || $id <= 0) {
-                $error = 'Game name and valid ID are required';
+            // Input validation
+            $errors = validateInput(
+                ['name' => $name, 'id' => $id], 
+                ['name', 'id'], 
+                [
+                    'name' => [
+                        'min_length' => 1,
+                        'max_length' => 255,
+                        'regex' => '/^[a-zA-Z0-9\s\-_]+$/'
+                    ],
+                    'description' => [
+                        'max_length' => 1000
+                    ],
+                    'id' => [
+                        'type' => 'int'
+                    ]
+                ]
+            );
+            
+            if (!empty($errors) || $id <= 0) {
+                $error = implode(', ', $errors);
+                if ($id <= 0) $error .= ($error ? ', ' : '') . 'Valid game ID is required';
             } else {
                 try {
                     $stmt = $pdo->prepare("UPDATE games SET name=?, description=? WHERE id=?");
-                    $stmt->execute([$name, $description, $id]);
+                    $stmt->execute([sanitizeInput($name), sanitizeInput($description), $id]);
                     $message = 'Game updated successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     $error = 'Database error occurred';
                 }
@@ -56,6 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $pdo->prepare("DELETE FROM games WHERE id=?");
                     $stmt->execute([$id]);
                     $message = 'Game deleted successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     $error = 'Database error occurred';
                 }
@@ -69,6 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $pdo->prepare("UPDATE games SET api_key = ? WHERE id = ?");
                     $stmt->execute([$newApiKey, $id]);
                     $message = 'API key regenerated successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     $error = 'Database error occurred';
                 }
@@ -80,6 +131,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Get all games
 $pdo = getDBConnection();
 $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM games ORDER BY name")->fetchAll();
+
+// Generate CSRF token for the page
+$csrf_token = $_SESSION['csrf_token'];
 ?>
 
 <!DOCTYPE html>
@@ -132,6 +186,7 @@ $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM gam
                     <div class="card-body">
                         <form method="POST" action="">
                             <input type="hidden" name="action" value="add_game">
+                            <?php echo csrfTokenField(); ?>
                             <div class="mb-3">
                                 <label for="name" class="form-label">Game Name</label>
                                 <input type="text" class="form-control" id="name" name="name" required>
@@ -169,8 +224,8 @@ $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM gam
                                         <td>
                                             <?php if ($game['api_key']): ?>
                                                 <span class="text-muted">••••••••</span>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showApiKey('<?php echo h($game['api_key']); ?>', <?php echo $game['id']; ?>)">View</button>
-                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('<?php echo h($game['api_key']); ?>')">Copy</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#apiKeyModal<?php echo $game['id']; ?>">View</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
                                             <?php else: ?>
                                                 <span class="text-warning">No API key</span>
                                             <?php endif; ?>
@@ -195,6 +250,7 @@ $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM gam
                                                 <form method="POST" action="">
                                                     <input type="hidden" name="action" value="edit_game">
                                                     <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                    <?php echo csrfTokenField(); ?>
                                                     <div class="modal-body">
                                                         <div class="mb-3">
                                                             <label class="form-label">Game Name</label>
@@ -225,6 +281,7 @@ $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM gam
                                                 <form method="POST" action="">
                                                     <input type="hidden" name="action" value="regenerate_api_key">
                                                     <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                    <?php echo csrfTokenField(); ?>
                                                     <div class="modal-body">
                                                         <p>Are you sure you want to regenerate the API key for "<?php echo h($game['name']); ?>"? This will change the API key and all applications using the old key will need to be updated.</p>
                                                         <div class="alert alert-warning">
@@ -240,6 +297,31 @@ $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM gam
                                         </div>
                                     </div>
                                     
+                                    <!-- API Key Modal -->
+                                    <div class="modal fade" id="apiKeyModal<?php echo $game['id']; ?>" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">API Key for <?php echo h($game['name']); ?></h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Your API key is:</p>
+                                                    <div class="alert alert-info">
+                                                        <code id="apiKeyDisplay<?php echo $game['id']; ?>"><?php echo h($game['api_key']); ?></code>
+                                                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
+                                                    </div>
+                                                    <div class="alert alert-warning">
+                                                        <strong>Important:</strong> This key will not be shown again. Please copy it now and store it securely.
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <!-- Delete Modal -->
                                     <div class="modal fade" id="deleteModal<?php echo $game['id']; ?>" tabindex="-1">
                                         <div class="modal-dialog">
@@ -251,6 +333,7 @@ $games = $pdo->query("SELECT id, name, api_key, description, created_at FROM gam
                                                 <form method="POST" action="">
                                                     <input type="hidden" name="action" value="delete_game">
                                                     <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                    <?php echo csrfTokenField(); ?>
                                                     <div class="modal-body">
                                                         <p>Are you sure you want to delete the game "<?php echo h($game['name']); ?>"? This will also delete all configurations associated with this game.</p>
                                                     </div>

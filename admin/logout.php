@@ -1,13 +1,21 @@
 <?php
-session_start();
+require_once __DIR__ . '/../api/functions.php';
+
+// Include config to make sure all required functions are available
+require_once __DIR__ . '/../config.php';
+
+// Start secure session to make sure we're cleaning up the right session
+startSecureSession();
 
 // Unset all session variables
 $_SESSION = array();
 
 // Delete the session cookie
-if (isset($_COOKIE[session_name()])) {
-    setcookie(session_name(), '', time()-3600, '/');
-}
+$params = session_get_cookie_params();
+setcookie(session_name(), '', time() - 42000,
+    $params['path'], $params['domain'],
+    $params['secure'], $params['httponly']
+);
 
 // Destroy the session
 session_destroy();

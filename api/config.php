@@ -96,6 +96,7 @@ function initializeDatabase() {
             $defaultPasswordHash = password_hash(ADMIN_PASSWORD, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)");
             $stmt->execute([ADMIN_USERNAME, $defaultPasswordHash, 'admin@example.com']);
+            error_log("Default admin user created with username: " . ADMIN_USERNAME . ". Please change the default password immediately!");
         }
         
         // Generate API keys for existing games that don't have them

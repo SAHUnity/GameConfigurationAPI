@@ -1,16 +1,24 @@
 <?php
-session_start();
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../api/functions.php'; // Include API functions for validation
 
 requireLogin();
+
+// CSRF Token Generation
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 $message = '';
 $error = '';
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
+    // Verify CSRF token
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        $error = 'Invalid CSRF token';
+    } elseif (isset($_POST['action'])) {
         $pdo = getDBConnection();
         
         if ($_POST['action'] === 'add_config') {
@@ -20,13 +28,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description = trim($_POST['description'] ?? '');
             $isActive = isset($_POST['is_active']) ? 1 : 0;
             
-            if (empty($key) || $gameId <= 0) {
-                $error = 'Configuration key and game selection are required';
+            // Input validation
+            $errors = validateInput(
+                ['config_key' => $key, 'game_id' => $gameId], 
+                ['config_key', 'game_id'], 
+                [
+                    'config_key' => [
+                        'min_length' => 1,
+                        'max_length' => 255,
+                        'regex' => '/^[a-zA-Z0-9_\-\.]+$/'
+                    ],
+                    'config_value' => [
+                        'max_length' => 1000
+                    ],
+                    'game_id' => [
+                        'type' => 'int'
+                    ]
+                ]
+            );
+            
+            if (!empty($errors)) {
+                $error = implode(', ', $errors);
             } else {
                 try {
                     $stmt = $pdo->prepare("INSERT INTO configurations (game_id, config_key, config_value, description, is_active) VALUES (?, ?, ?, ?, ?)");
-                    $stmt->execute([$gameId, $key, $value, $description, $isActive]);
+                    $stmt->execute([
+                        sanitizeInput($gameId, 'int'), 
+                        sanitizeInput($key), 
+                        sanitizeInput($value), 
+                        sanitizeInput($description), 
+                        sanitizeInput($isActive, 'int')
+                    ]);
                     $message = 'Configuration added successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     if ($e->getCode() == 23000) { // Duplicate entry
                         $error = 'A configuration with this key already exists for this game';
@@ -43,13 +78,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description = trim($_POST['description'] ?? '');
             $isActive = isset($_POST['is_active']) ? 1 : 0;
             
-            if (empty($key) || $id <= 0) {
-                $error = 'Configuration key and valid ID are required';
+            // Input validation
+            $errors = validateInput(
+                ['config_key' => $key, 'id' => $id], 
+                ['config_key', 'id'], 
+                [
+                    'config_key' => [
+                        'min_length' => 1,
+                        'max_length' => 255,
+                        'regex' => '/^[a-zA-Z0-9_\-\.]+$/'
+                    ],
+                    'config_value' => [
+                        'max_length' => 1000
+                    ],
+                    'id' => [
+                        'type' => 'int'
+                    ],
+                    'game_id' => [
+                        'type' => 'int'
+                    ]
+                ]
+            );
+            
+            if (!empty($errors)) {
+                $error = implode(', ', $errors);
             } else {
                 try {
                     $stmt = $pdo->prepare("UPDATE configurations SET game_id=?, config_key=?, config_value=?, description=?, is_active=? WHERE id=?");
-                    $stmt->execute([$gameId, $key, $value, $description, $isActive, $id]);
+                    $stmt->execute([
+                        sanitizeInput($gameId, 'int'), 
+                        sanitizeInput($key), 
+                        sanitizeInput($value), 
+                        sanitizeInput($description), 
+                        sanitizeInput($isActive, 'int'),
+                        sanitizeInput($id, 'int')
+                    ]);
                     $message = 'Configuration updated successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     if ($e->getCode() == 23000) { // Duplicate entry
                         $error = 'A configuration with this key already exists for this game';
@@ -64,8 +130,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($id > 0) {
                 try {
                     $stmt = $pdo->prepare("DELETE FROM configurations WHERE id=?");
-                    $stmt->execute([$id]);
+                    $stmt->execute([sanitizeInput($id, 'int')]);
                     $message = 'Configuration deleted successfully';
+                    // Regenerate CSRF token after successful action
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 } catch (PDOException $e) {
                     $error = 'Database error occurred';
                 }
@@ -85,6 +153,9 @@ $configs = $pdo->query("
 
 // Get all games for dropdown
 $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
+
+// Generate CSRF token for the page
+$csrf_token = $_SESSION['csrf_token'];
 ?>
 
 <!DOCTYPE html>
@@ -123,6 +194,7 @@ $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
                     <div class="card-body">
                         <form method="POST" action="">
                             <input type="hidden" name="action" value="add_config">
+                            <?php echo csrfTokenField(); ?>
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
@@ -204,6 +276,7 @@ $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
                                                 <form method="POST" action="">
                                                     <input type="hidden" name="action" value="edit_config">
                                                     <input type="hidden" name="id" value="<?php echo $config['id']; ?>">
+                                                    <?php echo csrfTokenField(); ?>
                                                     <div class="modal-body">
                                                         <div class="mb-3">
                                                             <label class="form-label">Game</label>
@@ -250,6 +323,7 @@ $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
                                                 <form method="POST" action="">
                                                     <input type="hidden" name="action" value="delete_config">
                                                     <input type="hidden" name="id" value="<?php echo $config['id']; ?>">
+                                                    <?php echo csrfTokenField(); ?>
                                                     <div class="modal-body">
                                                         <p>Are you sure you want to delete the configuration "<?php echo h($config['config_key']); ?>" for game "<?php echo h($config['game_name'] ?? 'N/A'); ?>"?</p>
                                                     </div>

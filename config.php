@@ -27,7 +27,8 @@ define('BASE_URL', $_ENV['BASE_URL'] ?? $_SERVER['BASE_URL'] ?? '');
 
 // Security
 define('ADMIN_USERNAME', $_ENV['ADMIN_USERNAME'] ?? $_SERVER['ADMIN_USERNAME'] ?? 'admin');
-define('ADMIN_PASSWORD', $_ENV['ADMIN_PASSWORD'] ?? $_SERVER['ADMIN_PASSWORD'] ?? 'password123'); // In production, use a strong password and preferably hash it
+define('ADMIN_PASSWORD', $_ENV['ADMIN_PASSWORD'] ?? $_SERVER['ADMIN_PASSWORD'] ?? 'SecurePassword123!'); // In production, change this default password and use proper hashing
+define('ALLOWED_ORIGINS', $_ENV['ALLOWED_ORIGINS'] ?? $_SERVER['ALLOWED_ORIGINS'] ?? 'https://localhost,https://127.0.0.1'); // Comma-separated list of allowed origins
 
 // Error reporting
 if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
