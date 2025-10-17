@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ],
                     'config_value' => [
                         'min_length' => 1,
-                        'max_length' => 1000
+                        'max_length' => 10000
                     ],
                     'game_id' => [
                         'type' => 'int'
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ],
                     'config_value' => [
                         'min_length' => 1,
-                        'max_length' => 1000
+                        'max_length' => 10000
                     ],
                     'id' => [
                         'type' => 'int'
@@ -221,7 +221,7 @@ $csrf_token = $_SESSION['csrf_token'];
                             <div class="mb-3">
                                 <label for="config_value" class="form-label">Configuration Value</label>
                                 <textarea class="form-control" id="config_value" name="config_value" rows="3" required></textarea>
-                                <div class="form-text">Maximum 1000 characters</div>
+                                <div class="form-text">Maximum 10000 characters</div>
                             </div>
                             <div class="mb-3">
                                 <label for="description" class="form-label">Description</label>
@@ -298,7 +298,7 @@ $csrf_token = $_SESSION['csrf_token'];
                                                             <div class="mb-3">
                                                                 <label class="form-label">Configuration Value</label>
                                                                 <textarea class="form-control" name="config_value" rows="3" required><?php echo h($config['config_value']); ?></textarea>
-                                                                <div class="form-text">Maximum 1000 characters</div>
+                                                                <div class="form-text">Maximum 10000 characters</div>
                                                             </div>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Description</label>

@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'regex' => '/^[a-zA-Z0-9\s\-_]+$/'
                     ],
                     'description' => [
-                        'max_length' => 1000
+                        'max_length' => 10000
                     ]
                 ]
             );
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'regex' => '/^[a-zA-Z0-9\s\-_]+$/'
                     ],
                     'description' => [
-                        'max_length' => 1000
+                        'max_length' => 10000
                     ],
                     'id' => [
                         'type' => 'int'

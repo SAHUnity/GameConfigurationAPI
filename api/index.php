@@ -164,10 +164,24 @@ try {
         exit();
     }
 
+    // Process configs to handle potential JSON values
+    $processedConfigs = [];
+    foreach ($result['configs'] as $key => $value) {
+        // Try to decode the value as JSON to see if it's actually JSON
+        $decodedValue = json_decode($value, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            // If it's valid JSON, store as the actual decoded value
+            $processedConfigs[$key] = $decodedValue;
+        } else {
+            // If not valid JSON, keep as string
+            $processedConfigs[$key] = $value;
+        }
+    }
+
     // Success response - only return the config data
     $response = [
         'success' => true,
-        'config' => $result['configs']
+        'config' => $processedConfigs
     ];
 
     $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
