@@ -2,14 +2,17 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
 
+// Start secure session
+startSecureSession(true);
+
 // Security headers
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
-// Check if user is logged in - this will also validate the session
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+// Check if user is logged in and session is valid
+if (!isSessionValid() || !isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
     exit();
 }
@@ -23,19 +26,21 @@ $activeConfigCount = $pdo->query("SELECT COUNT(*) FROM configurations WHERE is_a
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - <?php echo APP_NAME; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
+
 <body>
     <?php include 'includes/header.php'; ?>
-    
+
     <div class="container-fluid">
         <div class="row">
             <?php include 'includes/sidebar.php'; ?>
-            
+
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Dashboard</h1>
@@ -114,4 +119,5 @@ $activeConfigCount = $pdo->query("SELECT COUNT(*) FROM configurations WHERE is_a
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 </body>
+
 </html>

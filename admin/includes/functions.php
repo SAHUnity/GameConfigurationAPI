@@ -6,13 +6,16 @@ require_once __DIR__ . '/../../api/config.php';
 require_once __DIR__ . '/../../api/functions.php';
 
 // Start secure session
-startSecureSession();
+startSecureSession(true);
 
-// Initialize database if needed (create tables and default admin user)
-initializeDatabase();
+// Initialize database if needed - but only if we have the required functions
+if (function_exists('initializeDatabase')) {
+    initializeDatabase();
+}
 
 // Require authentication for admin pages
-function requireLogin() {
+function requireLogin()
+{
     if (!isSessionValid() || !isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
         session_destroy();
         header('Location: ./login.php');
@@ -21,12 +24,14 @@ function requireLogin() {
 }
 
 // Sanitize output for display
-function h($text) {
+function h($text)
+{
     return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 }
 
 // Generate a hidden input field with CSRF token
-function csrfTokenField() {
+function csrfTokenField()
+{
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
@@ -34,6 +39,7 @@ function csrfTokenField() {
 }
 
 // Verify CSRF token
-function verifyCsrfToken($token) {
+function verifyCsrfToken($token)
+{
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }

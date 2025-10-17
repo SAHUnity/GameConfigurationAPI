@@ -20,15 +20,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Invalid CSRF token';
     } elseif (isset($_POST['action'])) {
         $pdo = getDBConnection();
-        
+
         if ($_POST['action'] === 'add_game') {
             $name = trim($_POST['name'] ?? '');
             $description = trim($_POST['description'] ?? '');
-            
+
             // Input validation
             $errors = validateInput(
-                ['name' => $name], 
-                ['name'], 
+                ['name' => $name],
+                ['name'],
                 [
                     'name' => [
                         'min_length' => 1,
@@ -40,13 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]
                 ]
             );
-            
+
             if (!empty($errors)) {
                 $error = implode(', ', $errors);
             } else {
                 // Generate a secure API key for the new game
                 $apiKey = generateApiKey();
-                
+
                 try {
                     $stmt = $pdo->prepare("INSERT INTO games (name, api_key, description) VALUES (?, ?, ?)");
                     $stmt->execute([sanitizeInput($name), $apiKey, sanitizeInput($description)]);
@@ -61,11 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int)($_POST['id'] ?? 0);
             $name = trim($_POST['name'] ?? '');
             $description = trim($_POST['description'] ?? '');
-            
+
             // Input validation
             $errors = validateInput(
-                ['name' => $name, 'id' => $id], 
-                ['name', 'id'], 
+                ['name' => $name, 'id' => $id],
+                ['name', 'id'],
                 [
                     'name' => [
                         'min_length' => 1,
@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]
                 ]
             );
-            
+
             if (!empty($errors) || $id <= 0) {
                 $error = implode(', ', $errors);
                 if ($id <= 0) $error .= ($error ? ', ' : '') . 'Valid game ID is required';
@@ -97,8 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($_POST['action'] === 'delete_game') {
             $id = (int)($_POST['id'] ?? 0);
-            
-            if ($id > 0) {
+
+            if ($id <= 0) {
+                $error = 'Valid game ID is required';
+            } else {
                 try {
                     $stmt = $pdo->prepare("DELETE FROM games WHERE id=?");
                     $stmt->execute([$id]);
@@ -111,8 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($_POST['action'] === 'regenerate_api_key') {
             $id = (int)($_POST['id'] ?? 0);
-            
-            if ($id > 0) {
+
+            if ($id <= 0) {
+                $error = 'Valid game ID is required';
+            } else {
                 try {
                     $newApiKey = generateApiKey();
                     $stmt = $pdo->prepare("UPDATE games SET api_key = ? WHERE id = ?");
@@ -138,6 +142,7 @@ $csrf_token = $_SESSION['csrf_token'];
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -148,7 +153,7 @@ $csrf_token = $_SESSION['csrf_token'];
             // Show the API key in an alert (in a real implementation, you might want a modal)
             alert(`API Key for game ${gameId}: ${apiKey}\n\nIMPORTANT: Copy this key now as it will not be shown again.`);
         }
-        
+
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(function() {
                 alert('API key copied to clipboard!');
@@ -158,13 +163,14 @@ $csrf_token = $_SESSION['csrf_token'];
         }
     </script>
 </head>
+
 <body>
     <?php include 'includes/header.php'; ?>
-    
+
     <div class="container-fluid">
         <div class="row">
             <?php include 'includes/sidebar.php'; ?>
-            
+
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Manage Games</h1>
@@ -173,7 +179,7 @@ $csrf_token = $_SESSION['csrf_token'];
                 <?php if ($message): ?>
                     <div class="alert alert-success"><?php echo h($message); ?></div>
                 <?php endif; ?>
-                
+
                 <?php if ($error): ?>
                     <div class="alert alert-danger"><?php echo h($error); ?></div>
                 <?php endif; ?>
@@ -219,132 +225,132 @@ $csrf_token = $_SESSION['csrf_token'];
                                 </thead>
                                 <tbody>
                                     <?php foreach ($games as $game): ?>
-                                    <tr>
-                                        <td><?php echo h($game['name']); ?></td>
-                                        <td>
-                                            <?php if ($game['api_key']): ?>
-                                                <span class="text-muted">••••••••</span>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#apiKeyModal<?php echo $game['id']; ?>">View</button>
-                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
-                                            <?php else: ?>
-                                                <span class="text-warning">No API key</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td><?php echo h($game['description']); ?></td>
-                                        <td><?php echo h($game['created_at']); ?></td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $game['id']; ?>">Edit</button>
-                                            <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#regenerateModal<?php echo $game['id']; ?>">Regenerate Key</button>
-                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?php echo $game['id']; ?>">Delete</button>
-                                        </td>
-                                    </tr>
-                                    
-                                    <!-- Edit Modal -->
-                                    <div class="modal fade" id="editModal<?php echo $game['id']; ?>" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Edit Game</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <form method="POST" action="">
-                                                    <input type="hidden" name="action" value="edit_game">
-                                                    <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
-                                                    <?php echo csrfTokenField(); ?>
-                                                    <div class="modal-body">
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Game Name</label>
-                                                            <input type="text" class="form-control" name="name" value="<?php echo h($game['name']); ?>" required>
+                                        <tr>
+                                            <td><?php echo h($game['name']); ?></td>
+                                            <td>
+                                                <?php if ($game['api_key']): ?>
+                                                    <span class="text-muted">••••••••</span>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#apiKeyModal<?php echo $game['id']; ?>">View</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
+                                                <?php else: ?>
+                                                    <span class="text-warning">No API key</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?php echo h($game['description']); ?></td>
+                                            <td><?php echo h($game['created_at']); ?></td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $game['id']; ?>">Edit</button>
+                                                <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#regenerateModal<?php echo $game['id']; ?>">Regenerate Key</button>
+                                                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?php echo $game['id']; ?>">Delete</button>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Edit Modal -->
+                                        <div class="modal fade" id="editModal<?php echo $game['id']; ?>" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Edit Game</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <form method="POST" action="">
+                                                        <input type="hidden" name="action" value="edit_game">
+                                                        <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                        <?php echo csrfTokenField(); ?>
+                                                        <div class="modal-body">
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Game Name</label>
+                                                                <input type="text" class="form-control" name="name" value="<?php echo h($game['name']); ?>" required>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Description</label>
+                                                                <textarea class="form-control" name="description" rows="3"><?php echo h($game['description']); ?></textarea>
+                                                            </div>
                                                         </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Description</label>
-                                                            <textarea class="form-control" name="description" rows="3"><?php echo h($game['description']); ?></textarea>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Regenerate API Key Modal -->
+                                        <div class="modal fade" id="regenerateModal<?php echo $game['id']; ?>" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Regenerate API Key</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <form method="POST" action="">
+                                                        <input type="hidden" name="action" value="regenerate_api_key">
+                                                        <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                        <?php echo csrfTokenField(); ?>
+                                                        <div class="modal-body">
+                                                            <p>Are you sure you want to regenerate the API key for "<?php echo h($game['name']); ?>"? This will change the API key and all applications using the old key will need to be updated.</p>
+                                                            <div class="alert alert-warning">
+                                                                <strong>Warning:</strong> After regenerating the API key, all game clients that use this key will need to be updated with the new key.
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-danger">Regenerate Key</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- API Key Modal -->
+                                        <div class="modal fade" id="apiKeyModal<?php echo $game['id']; ?>" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">API Key for <?php echo h($game['name']); ?></h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <p>Your API key is:</p>
+                                                        <div class="alert alert-info">
+                                                            <code id="apiKeyDisplay<?php echo $game['id']; ?>"><?php echo h($game['api_key']); ?></code>
+                                                            <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
+                                                        </div>
+                                                        <div class="alert alert-warning">
+                                                            <strong>Important:</strong> This key will not be shown again. Please copy it now and store it securely.
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
                                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                        <button type="submit" class="btn btn-primary">Save Changes</button>
                                                     </div>
-                                                </form>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    
-                                    <!-- Regenerate API Key Modal -->
-                                    <div class="modal fade" id="regenerateModal<?php echo $game['id']; ?>" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Regenerate API Key</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <form method="POST" action="">
-                                                    <input type="hidden" name="action" value="regenerate_api_key">
-                                                    <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
-                                                    <?php echo csrfTokenField(); ?>
-                                                    <div class="modal-body">
-                                                        <p>Are you sure you want to regenerate the API key for "<?php echo h($game['name']); ?>"? This will change the API key and all applications using the old key will need to be updated.</p>
-                                                        <div class="alert alert-warning">
-                                                            <strong>Warning:</strong> After regenerating the API key, all game clients that use this key will need to be updated with the new key.
+
+                                        <!-- Delete Modal -->
+                                        <div class="modal fade" id="deleteModal<?php echo $game['id']; ?>" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Delete Game</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <form method="POST" action="">
+                                                        <input type="hidden" name="action" value="delete_game">
+                                                        <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
+                                                        <?php echo csrfTokenField(); ?>
+                                                        <div class="modal-body">
+                                                            <p>Are you sure you want to delete the game "<?php echo h($game['name']); ?>"? This will also delete all configurations associated with this game.</p>
                                                         </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-danger">Regenerate Key</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- API Key Modal -->
-                                    <div class="modal fade" id="apiKeyModal<?php echo $game['id']; ?>" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">API Key for <?php echo h($game['name']); ?></h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <p>Your API key is:</p>
-                                                    <div class="alert alert-info">
-                                                        <code id="apiKeyDisplay<?php echo $game['id']; ?>"><?php echo h($game['api_key']); ?></code>
-                                                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
-                                                    </div>
-                                                    <div class="alert alert-warning">
-                                                        <strong>Important:</strong> This key will not be shown again. Please copy it now and store it securely.
-                                                    </div>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-danger">Delete</button>
+                                                        </div>
+                                                    </form>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    
-                                    <!-- Delete Modal -->
-                                    <div class="modal fade" id="deleteModal<?php echo $game['id']; ?>" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Delete Game</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <form method="POST" action="">
-                                                    <input type="hidden" name="action" value="delete_game">
-                                                    <input type="hidden" name="id" value="<?php echo $game['id']; ?>">
-                                                    <?php echo csrfTokenField(); ?>
-                                                    <div class="modal-body">
-                                                        <p>Are you sure you want to delete the game "<?php echo h($game['name']); ?>"? This will also delete all configurations associated with this game.</p>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-danger">Delete</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
@@ -357,4 +363,5 @@ $csrf_token = $_SESSION['csrf_token'];
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>
