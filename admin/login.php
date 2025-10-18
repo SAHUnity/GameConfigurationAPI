@@ -27,7 +27,7 @@ $error = '';
 
 // Apply rate limiting to login attempts
 $clientIP = getClientIP();
-if (isRateLimited($clientIP, 300, 5)) { // 5 attempts per 5 minutes
+if (isRateLimited($clientIP, 300, 25)) { // 25 attempts per 5 minutes
     $error = 'Too many login attempts. Please try again later.';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Verify CSRF token

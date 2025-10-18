@@ -11,7 +11,7 @@ initializeDatabase();
 
 // Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization');
@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Set headers after includes to avoid any potential output issues
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
@@ -191,7 +191,7 @@ try {
     $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
     logApiRequest($sanitizedUri, ['ip' => $clientIP], 200, $clientIP);
 
-    echo json_encode($response);
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
     error_log("API Error: " . $e->getMessage());
     http_response_code(500);
