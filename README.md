@@ -11,6 +11,7 @@ A PHP-based API for managing game configurations with an admin dashboard, design
 - Automatic database initialization
 - Support for multiple input methods (GET, POST, JSON body)
 - cPanel compatible structure
+- Configurable logging to prevent storage overflow
 
 ## Installation
 
@@ -26,6 +27,8 @@ A PHP-based API for managing game configurations with an admin dashboard, design
    - `DB_NAME` - Your database name
    - `ADMIN_USERNAME` - Admin username for the dashboard
    - `ADMIN_PASSWORD` - Admin password (will be hashed automatically)
+   - `ENABLE_API_LOGGING` - Set to 'true' to enable API request logging, 'false' to disable (default: true)
+   - `ENABLE_SECURITY_LOGGING` - Set to 'true' to enable security event logging, 'false' to disable (default: true)
 5. The database tables will be created automatically when you first access the API or admin panel
 6. Access the admin dashboard at `/admin/login.php`
 
@@ -44,6 +47,8 @@ For enhanced security in cPanel:
    - **Name**: `ADMIN_USERNAME`, **Value**: your chosen admin username
    - **Name**: `ADMIN_PASSWORD`, **Value**: your chosen admin password
    - **Name**: `BASE_URL`, **Value**: base URL if deploying to subdirectory (e.g., `https://yoursite.com/subdir` if deployed to `yoursite.com/subdir/`)
+   - **Name**: `ENABLE_API_LOGGING`, **Value**: 'true' or 'false' to enable/disable API request logging (default: 'true')
+   - **Name**: `ENABLE_SECURITY_LOGGING`, **Value**: 'true' or 'false' to enable/disable security event logging (default: 'true')
 5. Click **Add** for each variable, then **Save** when done
 
 ### Deploying to Subdirectories or Subdomains
@@ -132,6 +137,16 @@ Content-Type: application/json
 - Use HTTPS in production environments
 - Validate and sanitize all inputs
 - CORS policy configured with specific allowed origins (set in ALLOWED_ORIGINS environment variable)
+- Configurable logging to prevent storage overflow (see logging section below)
+
+### Logging Configuration
+
+The system supports configurable logging to help prevent storage overflow when running multiple APIs on the same hosting account:
+
+- `ENABLE_API_LOGGING`: Set to 'true' to log API requests, 'false' to disable (default: true)
+- `ENABLE_SECURITY_LOGGING`: Set to 'true' to log security events (rate limits, failed logins, etc.), 'false' to disable (default: true)
+
+When running multiple APIs that share storage space, you can disable logging for lower-priority APIs by setting these variables to 'false'. This helps conserve storage space while keeping critical APIs functional.
 
 ### Configuring Allowed Origins (CORS)
 
@@ -247,3 +262,4 @@ To test the system functionality:
 - Check that the database tables were created automatically by accessing the API or admin panel
 - If you get "Game not found" errors, ensure the game exists and is active in the admin panel
 - If you get "Configuration not found" errors, ensure configurations are added and marked as active
+- If logs are filling storage space, consider setting `ENABLE_API_LOGGING` or `ENABLE_SECURITY_LOGGING` to 'false' in your environment variables

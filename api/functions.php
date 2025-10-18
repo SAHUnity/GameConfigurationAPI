@@ -136,9 +136,27 @@ function getClientIP()
     return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 }
 
+// Function to rotate log files if they exceed maximum size
+function rotateLogIfNeeded($logPath, $maxSize = 10485760) { // 10MB default
+    if (file_exists($logPath) && filesize($logPath) > $maxSize) {
+        $backupPath = $logPath . '.old';
+        if (file_exists($backupPath)) {
+            unlink($backupPath); // Remove old backup
+        }
+        rename($logPath, $backupPath); // Rotate logs
+        return true;
+    }
+    return false;
+}
+
 // Function to log API requests with enhanced security
 function logApiRequest($endpoint, $params, $responseCode, $clientIP = null)
 {
+    // Check if API logging is enabled
+    if (!defined('ENABLE_API_LOGGING') || !ENABLE_API_LOGGING) {
+        return; // Don't log if disabled
+    }
+    
     if ($clientIP === null) {
         $clientIP = getClientIP();
     }
@@ -179,6 +197,9 @@ function logApiRequest($endpoint, $params, $responseCode, $clientIP = null)
         $htaccessContent = "Order Deny,Allow\nDeny from all\n";
         @file_put_contents($logDir . '/.htaccess', $htaccessContent);
     }
+
+    // Rotate log if needed before writing
+    rotateLogIfNeeded($logPath);
 
     // Write to the log file with error handling
     $logData = '[' . date('Y-m-d H:i:s') . '] ' . json_encode($logEntry) . "\n";
@@ -227,8 +248,10 @@ function isRateLimited($clientIP, $timeWindow = 300, $maxRequests = 60)
         $rateData = json_decode(file_get_contents($rateLimitFile), true);
         if ($rateData && $rateData['timestamp'] > (time() - $timeWindow)) {
             if ($rateData['count'] >= $maxRequests) {
-                // Log rate limit exceeded event
-                logSecurityEvent('RATE_LIMIT_EXCEEDED', $clientIP);
+                // Log rate limit exceeded event (only if security logging is enabled)
+                if (defined('ENABLE_SECURITY_LOGGING') && ENABLE_SECURITY_LOGGING) {
+                    logSecurityEvent('RATE_LIMIT_EXCEEDED', $clientIP);
+                }
                 return true; // Rate limit exceeded
             } else {
                 // Increment count
@@ -269,6 +292,11 @@ function isValidApiKey($apiKey)
 // Function to log security events
 function logSecurityEvent($event, $clientIP = null, $details = [])
 {
+    // Check if security logging is enabled
+    if (!defined('ENABLE_SECURITY_LOGGING') || !ENABLE_SECURITY_LOGGING) {
+        return; // Don't log if disabled
+    }
+    
     if ($clientIP === null) {
         $clientIP = getClientIP();
     }

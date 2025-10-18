@@ -28,6 +28,16 @@ define('BASE_URL', $_ENV['BASE_URL'] ?? $_SERVER['BASE_URL'] ?? '');
 // Security
 define('ADMIN_USERNAME', $_ENV['ADMIN_USERNAME'] ?? $_SERVER['ADMIN_USERNAME'] ?? 'admin');
 define('ADMIN_PASSWORD', $_ENV['ADMIN_PASSWORD'] ?? $_SERVER['ADMIN_PASSWORD'] ?? 'SecurePassword123!'); // In production, change this default password and use proper hashing
+
+// Check if using default password and log warning
+if (defined('ADMIN_PASSWORD') && ADMIN_PASSWORD === 'SecurePassword123!') {
+    error_log("WARNING: Default admin password detected in config.php. Change immediately for production use!");
+}
+
+// Logging configuration
+define('ENABLE_API_LOGGING', ($_ENV['ENABLE_API_LOGGING'] ?? $_SERVER['ENABLE_API_LOGGING'] ?? 'true') === 'true');
+define('ENABLE_SECURITY_LOGGING', ($_ENV['ENABLE_SECURITY_LOGGING'] ?? $_SERVER['ENABLE_SECURITY_LOGGING'] ?? 'true') === 'true');
+
 define('ALLOWED_ORIGINS', $_ENV['ALLOWED_ORIGINS'] ?? $_SERVER['ALLOWED_ORIGINS'] ?? 'https://localhost,https://127.0.0.1'); // Comma-separated list of allowed origins
 
 // Error reporting

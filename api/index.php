@@ -26,6 +26,9 @@ header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Content-Security-Policy: default-src \'self\'');
+// Additional security headers
+header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 // Handle CORS
 $allowedOrigins = explode(',', ALLOWED_ORIGINS);

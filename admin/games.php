@@ -149,9 +149,10 @@ $csrf_token = $_SESSION['csrf_token'];
     <title>Manage Games - <?php echo APP_NAME; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script>
-        function showApiKey(apiKey, gameId) {
-            // Show the API key in an alert (in a real implementation, you might want a modal)
-            alert(`API Key for game ${gameId}: ${apiKey}\n\nIMPORTANT: Copy this key now as it will not be shown again.`);
+        function showApiKey(gameId, gameName) {
+            // For security, we should not display API keys in the UI after initial creation
+            // This would require a separate API endpoint that only returns keys once
+            alert(`API keys can only be viewed once during creation. For security, they're not stored in readable format after creation.\n\nGame: ${gameName}\nID: ${gameId}`);
         }
 
         function copyToClipboard(text) {
@@ -230,8 +231,7 @@ $csrf_token = $_SESSION['csrf_token'];
                                             <td>
                                                 <?php if ($game['api_key']): ?>
                                                     <span class="text-muted">••••••••</span>
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#apiKeyModal<?php echo $game['id']; ?>">View</button>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('<?php echo h(addslashes($game['api_key'])); ?>')">Copy</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="showApiKey(<?php echo $game['id']; ?>, '<?php echo h(addslashes($game['name'])); ?>')">View</button>
                                                 <?php else: ?>
                                                     <span class="text-warning">No API key</span>
                                                 <?php endif; ?>
