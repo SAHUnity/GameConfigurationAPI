@@ -28,8 +28,8 @@ function getDBConnection()
             $pdo->exec("SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION,ONLY_FULL_GROUP_BY'");
             
             // Set timeout to prevent hanging connections
-            $pdo->exec("SET SESSION wait_timeout = 30");
-            $pdo->exec("SET SESSION interactive_timeout = 30");
+            $pdo->exec("SET SESSION wait_timeout = " . DB_WAIT_TIMEOUT);
+            $pdo->exec("SET SESSION interactive_timeout = " . DB_INTERACTIVE_TIMEOUT);
             
         } catch (PDOException $e) {
             // Log detailed error but show generic message to user

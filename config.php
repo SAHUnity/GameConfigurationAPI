@@ -49,6 +49,25 @@ define('ENABLE_SECURITY_LOGGING', ($_ENV['ENABLE_SECURITY_LOGGING'] ?? $_SERVER[
 
 define('ALLOWED_ORIGINS', $_ENV['ALLOWED_ORIGINS'] ?? $_SERVER['ALLOWED_ORIGINS'] ?? 'https://localhost,https://127.0.0.1'); // Comma-separated list of allowed origins
 
+// Rate limiting configuration
+define('API_RATE_LIMIT', (int)($_ENV['API_RATE_LIMIT'] ?? $_SERVER['API_RATE_LIMIT'] ?? 60)); // Requests per time window
+define('API_RATE_WINDOW', (int)($_ENV['API_RATE_WINDOW'] ?? $_SERVER['API_RATE_WINDOW'] ?? 300)); // Time window in seconds (5 minutes)
+define('LOGIN_RATE_LIMIT', (int)($_ENV['LOGIN_RATE_LIMIT'] ?? $_SERVER['LOGIN_RATE_LIMIT'] ?? 10)); // Login attempts per time window
+define('LOGIN_RATE_WINDOW', (int)($_ENV['LOGIN_RATE_WINDOW'] ?? $_SERVER['LOGIN_RATE_WINDOW'] ?? 300)); // Login time window in seconds (5 minutes)
+
+// Session configuration
+define('SESSION_TIMEOUT', (int)($_ENV['SESSION_TIMEOUT'] ?? $_SERVER['SESSION_TIMEOUT'] ?? 3600)); // Session timeout in seconds (1 hour)
+define('SESSION_REGENERATION_INTERVAL', (int)($_ENV['SESSION_REGENERATION_INTERVAL'] ?? $_SERVER['SESSION_REGENERATION_INTERVAL'] ?? 1800)); // Session regeneration interval in seconds (30 minutes)
+define('CSRF_TOKEN_LIFETIME', (int)($_ENV['CSRF_TOKEN_LIFETIME'] ?? $_SERVER['CSRF_TOKEN_LIFETIME'] ?? 3600)); // CSRF token lifetime in seconds (1 hour)
+
+// Database configuration
+define('DB_WAIT_TIMEOUT', (int)($_ENV['DB_WAIT_TIMEOUT'] ?? $_SERVER['DB_WAIT_TIMEOUT'] ?? 30)); // Database wait timeout in seconds
+define('DB_INTERACTIVE_TIMEOUT', (int)($_ENV['DB_INTERACTIVE_TIMEOUT'] ?? $_SERVER['DB_INTERACTIVE_TIMEOUT'] ?? 30)); // Database interactive timeout in seconds
+
+// Logging configuration
+define('LOG_MAX_SIZE', (int)($_ENV['LOG_MAX_SIZE'] ?? $_SERVER['LOG_MAX_SIZE'] ?? 10485760)); // Maximum log file size in bytes (10MB)
+define('LOGIN_DELAY_MICROSECONDS', (int)($_ENV['LOGIN_DELAY_MICROSECONDS'] ?? $_SERVER['LOGIN_DELAY_MICROSECONDS'] ?? 500000)); // Login delay in microseconds (0.5 seconds)
+
 // Environment detection
 define('ENVIRONMENT', $_ENV['ENVIRONMENT'] ?? $_SERVER['ENVIRONMENT'] ?? 'production');
 

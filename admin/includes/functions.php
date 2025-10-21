@@ -35,8 +35,10 @@ function h($text)
 // Enhanced CSRF token generation
 function generateCsrfToken()
 {
+    $csrfLifetime = defined('CSRF_TOKEN_LIFETIME') ? CSRF_TOKEN_LIFETIME : 3600; // 1 hour default
+    
     if (empty($_SESSION['csrf_token']) || !isset($_SESSION['csrf_token_time']) ||
-        time() - $_SESSION['csrf_token_time'] > 3600) { // Token expires after 1 hour
+        time() - $_SESSION['csrf_token_time'] > $csrfLifetime) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['csrf_token_time'] = time();
     }
@@ -57,8 +59,10 @@ function verifyCsrfToken($token)
         return false;
     }
     
-    // Check if token has expired (1 hour)
-    if (time() - $_SESSION['csrf_token_time'] > 3600) {
+    // Check if token has expired
+    $csrfLifetime = defined('CSRF_TOKEN_LIFETIME') ? CSRF_TOKEN_LIFETIME : 3600; // 1 hour default
+    
+    if (time() - $_SESSION['csrf_token_time'] > $csrfLifetime) {
         unset($_SESSION['csrf_token'], $_SESSION['csrf_token_time']);
         return false;
     }

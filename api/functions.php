@@ -169,8 +169,12 @@ function ip_in_range($ip, $range) {
 }
 
 // Function to rotate log files if they exceed maximum size
-function rotateLogIfNeeded($logPath, $maxSize = 10485760)
-{ // 10MB default
+function rotateLogIfNeeded($logPath, $maxSize = null)
+{
+    // Use configured max size if not provided
+    if ($maxSize === null) {
+        $maxSize = defined('LOG_MAX_SIZE') ? LOG_MAX_SIZE : 10485760; // 10MB default
+    }
     if (file_exists($logPath) && filesize($logPath) > $maxSize) {
         $backupPath = $logPath . '.old';
         if (file_exists($backupPath)) {
@@ -450,11 +454,13 @@ function startSecureSession($isAdminContext = false)
     $samesite = 'Strict'; // CSRF protection
 
     // Set the session cookie with enhanced security parameters
+    $sessionLifetime = defined('SESSION_TIMEOUT') ? SESSION_TIMEOUT : 3600; // 1 hour default
+    
     if (PHP_VERSION_ID < 70300) {
-        session_set_cookie_params(3600, '/', '', $secure, $httponly); // 1 hour timeout
+        session_set_cookie_params($sessionLifetime, '/', '', $secure, $httponly);
     } else {
         session_set_cookie_params([
-            'lifetime' => 3600, // 1 hour
+            'lifetime' => $sessionLifetime,
             'path' => '/',
             'domain' => '',
             'secure' => $secure,  // Only send over HTTPS in production
@@ -487,10 +493,13 @@ function startSecureSession($isAdminContext = false)
     $_SESSION['last_user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
 
     // Regenerate session ID periodically to prevent fixation
+    $regenerationInterval = defined('SESSION_REGENERATION_INTERVAL') ? SESSION_REGENERATION_INTERVAL : 1800; // 30 minutes default
+    
     if (!isset($_SESSION['initiated'])) {
         session_regenerate_id(true);
         $_SESSION['initiated'] = true;
-    } elseif (time() - $_SESSION['last_regeneration'] > 1800) { // Every 30 minutes
+        $_SESSION['last_regeneration'] = time();
+    } elseif (time() - $_SESSION['last_regeneration'] > $regenerationInterval) {
         session_regenerate_id(true);
         $_SESSION['last_regeneration'] = time();
     }
@@ -503,8 +512,10 @@ function isSessionValid()
         return false;
     }
 
-    // Session timeout after 1 hour of inactivity
-    if (time() - $_SESSION['last_activity'] > 3600) {
+    // Session timeout after configured period of inactivity
+    $sessionTimeout = defined('SESSION_TIMEOUT') ? SESSION_TIMEOUT : 3600; // 1 hour default
+    
+    if (time() - $_SESSION['last_activity'] > $sessionTimeout) {
         session_destroy();
         return false;
     }

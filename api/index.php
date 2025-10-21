@@ -76,7 +76,7 @@ header('Access-Control-Allow-Credentials: false'); // Don't allow credentials un
 $clientIP = getClientIP();
 
 // Check if rate limited
-if (isRateLimited($clientIP)) {
+if (isRateLimited($clientIP, API_RATE_WINDOW, API_RATE_LIMIT)) {
     http_response_code(429);
     echo json_encode(['error' => 'Rate limit exceeded. Please try again later.']);
     exit();

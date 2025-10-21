@@ -22,7 +22,7 @@ $error = '';
 
 // Enhanced rate limiting for login attempts
 $clientIP = getClientIP();
-if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
+if (isRateLimited($clientIP, LOGIN_RATE_WINDOW, LOGIN_RATE_LIMIT)) {
     $error = 'Too many login attempts. Please try again later.';
     // Log security event
     logSecurityEvent('LOGIN_RATE_LIMIT_EXCEEDED', $clientIP);
@@ -72,7 +72,8 @@ if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
                     $error = 'Invalid username or password';
 
                     // Enhanced delay to prevent brute force
-                    usleep(500000); // 0.5 seconds delay
+                    $loginDelay = defined('LOGIN_DELAY_MICROSECONDS') ? LOGIN_DELAY_MICROSECONDS : 500000; // 0.5 seconds default
+                    usleep($loginDelay);
 
                     // Log failed login attempt
                     logSecurityEvent('LOGIN_FAILED', $clientIP, [
