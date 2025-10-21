@@ -1,8 +1,5 @@
 <?php
-require_once __DIR__ . '/../api/functions.php';
-
-// Include config to make sure all required functions are available
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/includes/functions.php';
 
 // Start secure session to make sure we're cleaning up the right session
 startSecureSession(true);

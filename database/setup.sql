@@ -56,9 +56,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Insert a default admin user (change the password after installation!)
--- Default credentials: admin / password123
--- Password is 'password123' hashed with PHP's password_hash function
-INSERT INTO users (username, password_hash, email) 
-SELECT 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin@example.com'
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin');
+-- Note: Default admin user is now created programmatically in api/config.php
+-- This is more secure as it uses environment variables for password
+-- The old hardcoded password approach has been removed for security reasons

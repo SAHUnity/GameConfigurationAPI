@@ -70,54 +70,7 @@ header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization');
 header('Access-Control-Allow-Credentials: false'); // Don't allow credentials unless necessary
 
-// Function to get game configuration by API key
-function getGameConfigByApiKey($apiKey)
-{
-    $pdo = getDBConnection();
-
-    try {
-        // Use a more secure comparison by hashing the API key or using a different approach
-        // Get active configurations for the game (ensure game is also active)
-        $stmt = $pdo->prepare("
-            SELECT c.config_key, c.config_value
-            FROM configurations c
-            JOIN games g ON c.game_id = g.id
-            WHERE g.api_key = ? AND c.is_active = 1 AND g.is_active = 1
-            ORDER BY c.config_key
-        ");
-        $stmt->execute([$apiKey]);
-
-        $configs = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-        if (empty($configs)) {
-            return null;
-        }
-
-        return [
-            'configs' => $configs
-        ];
-    } catch (PDOException $e) {
-        error_log("Database error in getGameConfigByApiKey: " . $e->getMessage());
-        return false;
-    }
-}
-
-// Function to verify API key existence without revealing if it's valid
-function verifyApiKey($apiKey)
-{
-    $pdo = getDBConnection();
-
-    try {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM games WHERE api_key = ? AND is_active = 1");
-        $stmt->execute([$apiKey]);
-        $count = $stmt->fetchColumn();
-
-        return $count > 0;
-    } catch (PDOException $e) {
-        error_log("API key verification error: " . $e->getMessage());
-        return false;
-    }
-}
+// Functions moved to api/functions.php to avoid duplication
 
 // Rate limiting and security checks
 $clientIP = getClientIP();
@@ -185,29 +138,35 @@ try {
 
     if ($result === false) {
         http_response_code(500);
-        echo json_encode(['error' => 'Database error occurred']);
+        echo json_encode(['error' => 'Service temporarily unavailable']);
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
-        logApiRequest($sanitizedUri, ['ip' => $clientIP], 500, $clientIP);
+        logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error_type' => 'database_error'], 500, $clientIP);
         exit();
     }
 
     if ($result === null) {
         http_response_code(401); // Use 401 instead of 404 to not reveal if game exists
-        echo json_encode(['error' => 'Unauthorized: Invalid API key']);
+        echo json_encode(['error' => 'Invalid API key']);
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
-        logApiRequest($sanitizedUri, ['ip' => $clientIP], 401, $clientIP);
+        logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error_type' => 'invalid_api_key'], 401, $clientIP);
         exit();
     }
 
     // Enhanced config processing with security validation
     $processedConfigs = [];
     foreach ($result['configs'] as $key => $value) {
-        // Validate config key format
-        if (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $key)) {
-            error_log("Invalid config key format detected: $key");
+        // Validate config key format - more restrictive pattern
+        if (!preg_match('/^[a-zA-Z0-9_\-\.]{1,64}$/', $key)) {
+            logSecurityEvent('INVALID_CONFIG_KEY', $clientIP, ['key' => $key]);
             continue; // Skip invalid keys
+        }
+
+        // Check value length to prevent DoS
+        if (strlen($value) > 10000) {
+            logSecurityEvent('CONFIG_VALUE_TOO_LARGE', $clientIP, ['key' => $key, 'length' => strlen($value)]);
+            continue;
         }
 
         // Try to decode the value as JSON to see if it's actually JSON
@@ -219,19 +178,24 @@ try {
             // Enhanced validation for string values
             $sanitizedValue = sanitizeConfigValue($value);
 
-            // Check for potentially dangerous content
+            // Check for potentially dangerous content with more comprehensive patterns
             $dangerousPatterns = [
                 '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi',
                 '/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/mi',
+                '/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/mi',
+                '/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/mi',
                 '/javascript:/i',
-                '/on\w+\s*=/i'
+                '/vbscript:/i',
+                '/on\w+\s*=/i',
+                '/data:text\/html/i',
+                '/data:application\/javascript/i'
             ];
 
             $isSafe = true;
             foreach ($dangerousPatterns as $pattern) {
                 if (preg_match($pattern, $sanitizedValue)) {
                     $isSafe = false;
-                    error_log("Dangerous content detected in config value for key: $key");
+                    logSecurityEvent('DANGEROUS_CONFIG_CONTENT', $clientIP, ['key' => $key, 'pattern_matched' => $pattern]);
                     break;
                 }
             }
@@ -254,11 +218,12 @@ try {
 
     echo json_encode($response, JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
+    // Don't expose detailed error information in production
     error_log("API Error: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'An unexpected error occurred']);
+    echo json_encode(['error' => 'Service temporarily unavailable']);
     $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
     $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
-    logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error' => $e->getMessage()], 500, $clientIP);
+    logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error_type' => 'exception'], 500, $clientIP);
     exit();
 }

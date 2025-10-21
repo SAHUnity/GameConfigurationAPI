@@ -31,10 +31,15 @@ define('ADMIN_USERNAME', $_ENV['ADMIN_USERNAME'] ?? $_SERVER['ADMIN_USERNAME'] ?
 // More secure default password handling
 $defaultPassword = $_ENV['ADMIN_PASSWORD'] ?? $_SERVER['ADMIN_PASSWORD'] ?? null;
 if ($defaultPassword === null || $defaultPassword === 'SecurePassword123!') {
-    // Generate a random secure password if none is provided or default is used
-    $defaultPassword = bin2hex(random_bytes(16));
-    error_log("SECURITY ALERT: No secure admin password provided. Generated temporary password: $defaultPassword");
-    error_log("SECURITY ALERT: Set ADMIN_PASSWORD environment variable immediately!");
+    // CRITICAL: Never log passwords in production
+    if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+        $defaultPassword = bin2hex(random_bytes(16));
+        error_log("DEVELOPMENT: Generated temporary admin password: $defaultPassword");
+        error_log("DEVELOPMENT: Set ADMIN_PASSWORD environment variable before production deployment!");
+    } else {
+        // In production, require explicit password setting
+        die("SECURITY ERROR: ADMIN_PASSWORD environment variable must be set in production. Please configure a secure admin password.");
+    }
 }
 define('ADMIN_PASSWORD', $defaultPassword);
 

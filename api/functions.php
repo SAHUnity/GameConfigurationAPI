@@ -104,36 +104,68 @@ function generateApiKey($length = 32)
     return $key;
 }
 
-// Function to get client IP address with more security
+// Function to get client IP address with enhanced security
 function getClientIP()
 {
-    $ipKeys = [
-        'HTTP_CF_CONNECTING_IP',    // Cloudflare
-        'HTTP_CLIENT_IP',           // Proxy
-        'HTTP_X_FORWARDED_FOR',     // Load balancer
-        'HTTP_X_FORWARDED',         // Load balancer
-        'HTTP_X_CLUSTER_CLIENT_IP', // Cluster
-        'HTTP_FORWARDED_FOR',       // Proxy
-        'HTTP_FORWARDED',           // Proxy
-        'REMOTE_ADDR'               // Standard
-    ];
-
-    foreach ($ipKeys as $key) {
-        if (!empty($_SERVER[$key])) {
-            $ip = $_SERVER[$key];
-            // Handle multiple IPs in the header (comma-separated)
-            $ip = explode(',', $ip)[0];
-            $ip = trim($ip);
-
-            // Validate IP format
-            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                return $ip;
+    // Security: Only trust specific headers if behind a known proxy
+    $trustedProxies = [];
+    
+    // Check if we're behind a trusted proxy
+    $isTrustedProxy = false;
+    if (!empty($_SERVER['REMOTE_ADDR'])) {
+        foreach ($trustedProxies as $trustedProxy) {
+            if ($_SERVER['REMOTE_ADDR'] === $trustedProxy ||
+                (strpos($trustedProxy, '/') !== false && ip_in_range($_SERVER['REMOTE_ADDR'], $trustedProxy))) {
+                $isTrustedProxy = true;
+                break;
             }
         }
     }
 
-    // Fallback to REMOTE_ADDR if no valid IP found
-    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    // Only check forwarded headers if behind trusted proxy
+    if ($isTrustedProxy) {
+        $ipKeys = [
+            'HTTP_CF_CONNECTING_IP',    // Cloudflare
+            'HTTP_X_FORWARDED_FOR',     // Load balancer
+        ];
+
+        foreach ($ipKeys as $key) {
+            if (!empty($_SERVER[$key])) {
+                $ips = explode(',', $_SERVER[$key]);
+                $ip = trim($ips[0]);
+
+                // Validate IP format and ensure it's not private
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
+            }
+        }
+    }
+
+    // Always use REMOTE_ADDR as fallback - most reliable
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    
+    // Validate the final IP
+    if ($ip !== 'unknown' && filter_var($ip, FILTER_VALIDATE_IP)) {
+        return $ip;
+    }
+    
+    return 'unknown';
+}
+
+// Helper function to check if IP is in range (CIDR notation)
+function ip_in_range($ip, $range) {
+    if (strpos($range, '/') === false) {
+        return $ip === $range;
+    }
+    
+    list($range, $netmask) = explode('/', $range, 2);
+    $range_decimal = ip2long($range);
+    $ip_decimal = ip2long($ip);
+    $wildcard_decimal = pow(2, (32 - $netmask)) - 1;
+    $mask = ~$wildcard_decimal;
+    
+    return ($ip_decimal & $mask) === ($range_decimal & $mask);
 }
 
 // Function to rotate log files if they exceed maximum size
@@ -195,7 +227,7 @@ function logApiRequest($endpoint, $params, $responseCode, $clientIP = null)
         }
 
         // Try to create .htaccess file to restrict access, but don't fail if it doesn't work
-        $htaccessContent = "Order Deny,Allow\nDeny from all\n";
+        $htaccessContent = "Require all denied\n";
         @file_put_contents($logDir . '/.htaccess', $htaccessContent);
     }
 
@@ -298,7 +330,7 @@ function isRateLimitedFileBased($clientIP, $timeWindow = 300, $maxRequests = 60)
             return false;
         }
 
-        $htaccessContent = "Order Deny,Allow\nDeny from all\n";
+        $htaccessContent = "Require all denied\n";
         @file_put_contents($rateLimitDir . '/.htaccess', $htaccessContent);
     }
 
@@ -383,7 +415,7 @@ function logSecurityEvent($event, $clientIP = null, $details = [])
         }
 
         // Try to create .htaccess file to restrict access, but don't fail if it doesn't work
-        $htaccessContent = "Order Deny,Allow\nDeny from all\n";
+        $htaccessContent = "Require all denied\n";
         @file_put_contents($logDir . '/.htaccess', $htaccessContent);
     }
 
@@ -478,4 +510,52 @@ function isSessionValid()
     }
 
     return true;
+}
+
+// Function to get game configuration by API key
+function getGameConfigByApiKey($apiKey)
+{
+    $pdo = getDBConnection();
+
+    try {
+        // Get active configurations for the game (ensure game is also active)
+        $stmt = $pdo->prepare("
+            SELECT c.config_key, c.config_value
+            FROM configurations c
+            JOIN games g ON c.game_id = g.id
+            WHERE g.api_key = ? AND c.is_active = 1 AND g.is_active = 1
+            ORDER BY c.config_key
+        ");
+        $stmt->execute([$apiKey]);
+
+        $configs = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        if (empty($configs)) {
+            return null;
+        }
+
+        return [
+            'configs' => $configs
+        ];
+    } catch (PDOException $e) {
+        error_log("Database error in getGameConfigByApiKey: " . $e->getMessage());
+        return false;
+    }
+}
+
+// Function to verify API key existence without revealing if it's valid
+function verifyApiKey($apiKey)
+{
+    $pdo = getDBConnection();
+
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM games WHERE api_key = ? AND is_active = 1");
+        $stmt->execute([$apiKey]);
+        $count = $stmt->fetchColumn();
+
+        return $count > 0;
+    } catch (PDOException $e) {
+        error_log("API key verification error: " . $e->getMessage());
+        return false;
+    }
 }

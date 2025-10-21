@@ -79,7 +79,6 @@ try {
 echo "<h3>Test 5: Admin Functions</h3>\n";
 if (file_exists(__DIR__ . '/admin/includes/functions.php')) {
     require_once __DIR__ . '/admin/includes/functions.php';
-    require_once __DIR__ . '/api/functions.php';
     echo "<p style='color: green;'>✓ Admin functions loaded successfully</p>\n";
     
     // Test API key generation instead of slug generation

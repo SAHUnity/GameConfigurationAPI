@@ -21,10 +21,16 @@ function getDBConnection()
                 // Enhanced security options
                 PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true,
                 PDO::ATTR_PERSISTENT => false, // Don't use persistent connections for security
+                PDO::MYSQL_ATTR_MULTI_STATEMENTS => false, // Prevent SQL injection via multiple statements
             ]);
 
-            // Set secure SQL mode
-            $pdo->exec("SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'");
+            // Set secure SQL mode with enhanced security
+            $pdo->exec("SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION,ONLY_FULL_GROUP_BY'");
+            
+            // Set timeout to prevent hanging connections
+            $pdo->exec("SET SESSION wait_timeout = 30");
+            $pdo->exec("SET SESSION interactive_timeout = 30");
+            
         } catch (PDOException $e) {
             // Log detailed error but show generic message to user
             error_log("Database connection failed: " . $e->getMessage());
@@ -33,7 +39,7 @@ function getDBConnection()
             if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
                 die("Database connection failed: " . $e->getMessage());
             } else {
-                die("Database connection failed. Please check your configuration.");
+                die("Service temporarily unavailable. Please try again later.");
             }
         }
     }

@@ -1,23 +1,21 @@
 <?php
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/../api/functions.php'; // Include API functions for validation
 
 requireLogin();
 
-// CSRF Token Generation
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
+// CSRF Token Generation with enhanced security
+$csrf_token = generateCsrfToken();
 
 $message = '';
 $error = '';
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Verify CSRF token
-    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-        $error = 'Invalid CSRF token';
+    // Verify CSRF token with enhanced validation
+    if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+        $error = 'Invalid or expired CSRF token';
+        logSecurityEvent('CSRF_TOKEN_INVALID', getClientIP(), ['form' => 'configs']);
     } elseif (isset($_POST['action'])) {
         $pdo = getDBConnection();
 
@@ -214,8 +212,7 @@ $configs = $pdo->query("
 // Get all games for dropdown
 $games = $pdo->query("SELECT id, name FROM games ORDER BY name")->fetchAll();
 
-// Generate CSRF token for the page
-$csrf_token = $_SESSION['csrf_token'];
+// CSRF token is already generated above
 ?>
 
 <!DOCTYPE html>

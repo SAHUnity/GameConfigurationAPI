@@ -1,22 +1,16 @@
 <?php
 require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../api/config.php'; // Include API config for database functions
-require_once __DIR__ . '/../api/functions.php'; // Include functions for secure session
 require_once __DIR__ . '/includes/functions.php'; // Include admin functions for h() function
 
 // Start secure session
 startSecureSession(true);
 
 // Initialize database if needed (create tables and default admin user)
-// Only if not already initialized to avoid unnecessary overhead
-if (function_exists('initializeDatabase')) {
-    initializeDatabase();
-}
+// Initialize database if needed
+initializeDatabase();
 
-// CSRF Token Generation
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
+// CSRF Token Generation with enhanced security
+$csrf_token = generateCsrfToken();
 
 // If already logged in and session is valid, redirect to dashboard
 if (isSessionValid() && isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
@@ -31,13 +25,12 @@ $clientIP = getClientIP();
 if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
     $error = 'Too many login attempts. Please try again later.';
     // Log security event
-    if (function_exists('logSecurityEvent')) {
-        logSecurityEvent('LOGIN_RATE_LIMIT_EXCEEDED', $clientIP);
-    }
+    logSecurityEvent('LOGIN_RATE_LIMIT_EXCEEDED', $clientIP);
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Verify CSRF token
-    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-        $error = 'Invalid CSRF token';
+    // Verify CSRF token with enhanced validation
+    if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
+        $error = 'Invalid or expired CSRF token';
+        logSecurityEvent('CSRF_TOKEN_INVALID', $clientIP, ['form' => 'login']);
     } else {
         $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
@@ -68,12 +61,10 @@ if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
                     $_SESSION['last_regeneration'] = time();
 
                     // Log successful login
-                    if (function_exists('logSecurityEvent')) {
-                        logSecurityEvent('LOGIN_SUCCESS', $clientIP, [
-                            'user_id' => $user['id'],
-                            'username' => $user['username']
-                        ]);
-                    }
+                    logSecurityEvent('LOGIN_SUCCESS', $clientIP, [
+                        'user_id' => $user['id'],
+                        'username' => $user['username']
+                    ]);
 
                     header('Location: ./index.php');
                     exit();
@@ -84,12 +75,10 @@ if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
                     usleep(500000); // 0.5 seconds delay
 
                     // Log failed login attempt
-                    if (function_exists('logSecurityEvent')) {
-                        logSecurityEvent('LOGIN_FAILED', $clientIP, [
-                            'username' => $username,
-                            'reason' => 'invalid_credentials'
-                        ]);
-                    }
+                    logSecurityEvent('LOGIN_FAILED', $clientIP, [
+                        'username' => $username,
+                        'reason' => 'invalid_credentials'
+                    ]);
                 }
             } catch (PDOException $e) {
                 $error = 'Database error occurred';
@@ -100,8 +89,7 @@ if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
     }
 }
 
-// Generate a new CSRF token for the form
-$csrf_token = $_SESSION['csrf_token'];
+// CSRF token is already generated above
 ?>
 
 <!DOCTYPE html>
