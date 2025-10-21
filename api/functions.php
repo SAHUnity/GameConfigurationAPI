@@ -137,7 +137,8 @@ function getClientIP()
 }
 
 // Function to rotate log files if they exceed maximum size
-function rotateLogIfNeeded($logPath, $maxSize = 10485760) { // 10MB default
+function rotateLogIfNeeded($logPath, $maxSize = 10485760)
+{ // 10MB default
     if (file_exists($logPath) && filesize($logPath) > $maxSize) {
         $backupPath = $logPath . '.old';
         if (file_exists($backupPath)) {
@@ -156,7 +157,7 @@ function logApiRequest($endpoint, $params, $responseCode, $clientIP = null)
     if (!defined('ENABLE_API_LOGGING') || !ENABLE_API_LOGGING) {
         return; // Don't log if disabled
     }
-    
+
     if ($clientIP === null) {
         $clientIP = getClientIP();
     }
@@ -224,42 +225,102 @@ function sendJsonResponse($data, $statusCode = 200)
     exit();
 }
 
-// Function to check rate limiting
+// Enhanced rate limiting with database backend
 function isRateLimited($clientIP, $timeWindow = 300, $maxRequests = 60)
 {
-    // Create a simple rate limiting based on IP
-    $rateLimitDir = __DIR__ . '/../rate_limit';
-    if (!file_exists($rateLimitDir)) {
-        // Try to create the directory with appropriate permissions
-        if (!mkdir($rateLimitDir, 0750, true) && !is_dir($rateLimitDir)) {
-            // If we can't create the rate limiting directory, skip rate limiting but log the issue
-            error_log("Failed to create rate limiting directory: $rateLimitDir");
-            return false; // Don't rate limit if we can't store the data
+    // Try database-based rate limiting first
+    $pdo = null;
+    try {
+        $pdo = getDBConnection();
+
+        // Create rate_limits table if it doesn't exist
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ip_address VARCHAR(45) NOT NULL,
+                endpoint VARCHAR(255) NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_ip_endpoint_timestamp (ip_address, endpoint, timestamp)
+            )
+        ");
+
+        // Clean old entries
+        $cleanupStmt = $pdo->prepare("
+            DELETE FROM rate_limits
+            WHERE timestamp < DATE_SUB(NOW(), INTERVAL ? SECOND)
+        ");
+        $cleanupStmt->execute([$timeWindow]);
+
+        // Count recent requests for this IP and endpoint
+        $endpoint = $_SERVER['REQUEST_URI'] ?? 'unknown';
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) as request_count
+            FROM rate_limits
+            WHERE ip_address = ? AND endpoint = ? AND timestamp > DATE_SUB(NOW(), INTERVAL ? SECOND)
+        ");
+        $countStmt->execute([$clientIP, $endpoint, $timeWindow]);
+        $count = $countStmt->fetch()['request_count'];
+
+        if ($count >= $maxRequests) {
+            // Log rate limit exceeded event
+            if (defined('ENABLE_SECURITY_LOGGING') && ENABLE_SECURITY_LOGGING) {
+                logSecurityEvent('RATE_LIMIT_EXCEEDED', $clientIP, [
+                    'endpoint' => $endpoint,
+                    'count' => $count,
+                    'max_allowed' => $maxRequests
+                ]);
+            }
+            return true;
         }
 
-        // Try to create .htaccess file to restrict access, but don't fail if it doesn't work
+        // Record this request
+        $insertStmt = $pdo->prepare("
+            INSERT INTO rate_limits (ip_address, endpoint) VALUES (?, ?)
+        ");
+        $insertStmt->execute([$clientIP, $endpoint]);
+
+        return false;
+    } catch (PDOException $e) {
+        error_log("Database rate limiting failed, falling back to file-based: " . $e->getMessage());
+
+        // Fallback to file-based rate limiting
+        return isRateLimitedFileBased($clientIP, $timeWindow, $maxRequests);
+    }
+}
+
+// Fallback file-based rate limiting (enhanced)
+function isRateLimitedFileBased($clientIP, $timeWindow = 300, $maxRequests = 60)
+{
+    $rateLimitDir = __DIR__ . '/../rate_limit';
+    if (!file_exists($rateLimitDir)) {
+        if (!mkdir($rateLimitDir, 0750, true) && !is_dir($rateLimitDir)) {
+            error_log("Failed to create rate limiting directory: $rateLimitDir");
+            return false;
+        }
+
         $htaccessContent = "Order Deny,Allow\nDeny from all\n";
         @file_put_contents($rateLimitDir . '/.htaccess', $htaccessContent);
     }
 
-    $rateLimitFile = $rateLimitDir . '/' . hash('sha256', $clientIP) . '.json';
+    $endpoint = $_SERVER['REQUEST_URI'] ?? 'unknown';
+    $rateLimitFile = $rateLimitDir . '/' . hash('sha256', $clientIP . $endpoint) . '.json';
 
     if (file_exists($rateLimitFile)) {
         $rateData = json_decode(file_get_contents($rateLimitFile), true);
         if ($rateData && $rateData['timestamp'] > (time() - $timeWindow)) {
             if ($rateData['count'] >= $maxRequests) {
-                // Log rate limit exceeded event (only if security logging is enabled)
                 if (defined('ENABLE_SECURITY_LOGGING') && ENABLE_SECURITY_LOGGING) {
-                    logSecurityEvent('RATE_LIMIT_EXCEEDED', $clientIP);
+                    logSecurityEvent('RATE_LIMIT_EXCEEDED', $clientIP, [
+                        'endpoint' => $endpoint,
+                        'method' => 'file_based'
+                    ]);
                 }
-                return true; // Rate limit exceeded
+                return true;
             } else {
-                // Increment count
                 $rateData['count']++;
                 file_put_contents($rateLimitFile, json_encode($rateData));
             }
         } else {
-            // Reset with new window
             $rateData = [
                 'timestamp' => time(),
                 'count' => 1
@@ -267,7 +328,6 @@ function isRateLimited($clientIP, $timeWindow = 300, $maxRequests = 60)
             file_put_contents($rateLimitFile, json_encode($rateData));
         }
     } else {
-        // Create first entry
         $rateData = [
             'timestamp' => time(),
             'count' => 1
@@ -275,7 +335,7 @@ function isRateLimited($clientIP, $timeWindow = 300, $maxRequests = 60)
         file_put_contents($rateLimitFile, json_encode($rateData));
     }
 
-    return false; // Not rate limited
+    return false;
 }
 
 // Function to validate API key format
@@ -296,7 +356,7 @@ function logSecurityEvent($event, $clientIP = null, $details = [])
     if (!defined('ENABLE_SECURITY_LOGGING') || !ENABLE_SECURITY_LOGGING) {
         return; // Don't log if disabled
     }
-    
+
     if ($clientIP === null) {
         $clientIP = getClientIP();
     }
@@ -340,20 +400,24 @@ function isValidHttpMethod($method)
 // Function to start secure session
 function startSecureSession($isAdminContext = false)
 {
+    // Enforce HTTPS in production for admin sessions
+    if ($isAdminContext && (!defined('ENVIRONMENT') || ENVIRONMENT !== 'development')) {
+        if (!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] !== 'on') {
+            header('Location: https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
+            exit();
+        }
+    }
+
     // Set session cookie parameters for security
     $session_name = 'GAME_CONFIG_SESSION';
     session_name($session_name);
 
-    // Prevent JavaScript access to session cookie
-    $secure = false; // Set to true if using HTTPS
+    // Enhanced security: Force secure cookies in production
+    $secure = (!defined('ENVIRONMENT') || ENVIRONMENT !== 'development') ? true : false;
     $httponly = true; // Prevents JavaScript access to session cookie
     $samesite = 'Strict'; // CSRF protection
 
-    if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-        $secure = true;
-    }
-
-    // Set the session cookie with security parameters
+    // Set the session cookie with enhanced security parameters
     if (PHP_VERSION_ID < 70300) {
         session_set_cookie_params(3600, '/', '', $secure, $httponly); // 1 hour timeout
     } else {

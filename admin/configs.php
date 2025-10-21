@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description = trim($_POST['description'] ?? '');
             $isActive = isset($_POST['is_active']) ? 1 : 0;
 
-            // Input validation
+            // Enhanced input validation
             $errors = validateInput(
                 ['config_key' => $key, 'game_id' => $gameId, 'config_value' => $value],
                 ['config_key', 'game_id', 'config_value'],
@@ -47,6 +47,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]
                 ]
             );
+
+            // Additional security validation for config value
+            if (empty($errors)) {
+                // Check for potentially dangerous content
+                $dangerousPatterns = [
+                    '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi',
+                    '/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/mi',
+                    '/javascript:/i',
+                    '/on\w+\s*=/i',
+                    '/data:text\/html/i'
+                ];
+
+                foreach ($dangerousPatterns as $pattern) {
+                    if (preg_match($pattern, $value)) {
+                        $errors[] = "Configuration value contains potentially dangerous content";
+                        break;
+                    }
+                }
+
+                // Validate JSON if it looks like JSON
+                if ((substr($value, 0, 1) === '{' && substr($value, -1) === '}') ||
+                    (substr($value, 0, 1) === '[' && substr($value, -1) === ']')
+                ) {
+                    json_decode($value);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $errors[] = "Invalid JSON format in configuration value";
+                    }
+                }
+            }
 
             if (!empty($errors)) {
                 $error = implode(', ', $errors);
@@ -79,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description = trim($_POST['description'] ?? '');
             $isActive = isset($_POST['is_active']) ? 1 : 0;
 
-            // Input validation
+            // Enhanced input validation
             $errors = validateInput(
                 ['config_key' => $key, 'id' => $id, 'game_id' => $gameId, 'config_value' => $value],
                 ['config_key', 'id', 'game_id', 'config_value'],
@@ -101,6 +130,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]
                 ]
             );
+
+            // Additional security validation for config value
+            if (empty($errors)) {
+                // Check for potentially dangerous content
+                $dangerousPatterns = [
+                    '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi',
+                    '/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/mi',
+                    '/javascript:/i',
+                    '/on\w+\s*=/i',
+                    '/data:text\/html/i'
+                ];
+
+                foreach ($dangerousPatterns as $pattern) {
+                    if (preg_match($pattern, $value)) {
+                        $errors[] = "Configuration value contains potentially dangerous content";
+                        break;
+                    }
+                }
+
+                // Validate JSON if it looks like JSON
+                if ((substr($value, 0, 1) === '{' && substr($value, -1) === '}') ||
+                    (substr($value, 0, 1) === '[' && substr($value, -1) === ']')
+                ) {
+                    json_decode($value);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $errors[] = "Invalid JSON format in configuration value";
+                    }
+                }
+            }
 
             if (!empty($errors)) {
                 $error = implode(', ', $errors);

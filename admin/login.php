@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../api/config.php'; // Include API config for database functions
 require_once __DIR__ . '/../api/functions.php'; // Include functions for secure session
+require_once __DIR__ . '/includes/functions.php'; // Include admin functions for h() function
 
 // Start secure session
 startSecureSession(true);
@@ -25,10 +26,14 @@ if (isSessionValid() && isset($_SESSION['admin_logged_in']) && $_SESSION['admin_
 
 $error = '';
 
-// Apply rate limiting to login attempts
+// Enhanced rate limiting for login attempts
 $clientIP = getClientIP();
-if (isRateLimited($clientIP, 300, 25)) { // 25 attempts per 5 minutes
+if (isRateLimited($clientIP, 300, 10)) { // Reduced to 10 attempts per 5 minutes
     $error = 'Too many login attempts. Please try again later.';
+    // Log security event
+    if (function_exists('logSecurityEvent')) {
+        logSecurityEvent('LOGIN_RATE_LIMIT_EXCEEDED', $clientIP);
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Verify CSRF token
     if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
@@ -46,7 +51,7 @@ if (isRateLimited($clientIP, 300, 25)) { // 25 attempts per 5 minutes
                 $user = $stmt->fetch();
 
                 if ($user && password_verify($password, $user['password_hash'])) {
-                    // Regenerate session ID to prevent session fixation
+                    // Enhanced session security
                     session_regenerate_id(true);
 
                     // Set admin session variables
@@ -54,17 +59,37 @@ if (isRateLimited($clientIP, 300, 25)) { // 25 attempts per 5 minutes
                     $_SESSION['admin_user_id'] = $user['id'];
                     $_SESSION['admin_username'] = $user['username'];
                     $_SESSION['login_time'] = time();
+                    $_SESSION['last_activity'] = time();
+                    $_SESSION['login_ip'] = $clientIP;
+                    $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
                     // Reset CSRF token after successful login
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                     $_SESSION['last_regeneration'] = time();
 
+                    // Log successful login
+                    if (function_exists('logSecurityEvent')) {
+                        logSecurityEvent('LOGIN_SUCCESS', $clientIP, [
+                            'user_id' => $user['id'],
+                            'username' => $user['username']
+                        ]);
+                    }
+
                     header('Location: ./index.php');
                     exit();
                 } else {
                     $error = 'Invalid username or password';
-                    // Add delay to prevent brute force
-                    usleep(200000); // 0.2 seconds delay
+
+                    // Enhanced delay to prevent brute force
+                    usleep(500000); // 0.5 seconds delay
+
+                    // Log failed login attempt
+                    if (function_exists('logSecurityEvent')) {
+                        logSecurityEvent('LOGIN_FAILED', $clientIP, [
+                            'username' => $username,
+                            'reason' => 'invalid_credentials'
+                        ]);
+                    }
                 }
             } catch (PDOException $e) {
                 $error = 'Database error occurred';

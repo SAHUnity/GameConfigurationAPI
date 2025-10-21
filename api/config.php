@@ -18,10 +18,23 @@ function getDBConnection()
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
+                // Enhanced security options
+                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true,
+                PDO::ATTR_PERSISTENT => false, // Don't use persistent connections for security
             ]);
+
+            // Set secure SQL mode
+            $pdo->exec("SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'");
         } catch (PDOException $e) {
+            // Log detailed error but show generic message to user
             error_log("Database connection failed: " . $e->getMessage());
-            die("Database connection failed. Please check your configuration.");
+
+            // Don't expose database details in production
+            if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+                die("Database connection failed: " . $e->getMessage());
+            } else {
+                die("Database connection failed. Please check your configuration.");
+            }
         }
     }
 
@@ -46,7 +59,7 @@ function initializeDatabase()
         // Now connect to the specific database
         $pdo = getDBConnection();
 
-        // Create tables if they don't exist
+        // Create tables if they don't exist with enhanced security
         $tables = [
             "games" => "CREATE TABLE IF NOT EXISTS games (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -54,8 +67,12 @@ function initializeDatabase()
                 api_key VARCHAR(64) UNIQUE NOT NULL,
                 description TEXT,
                 is_active TINYINT(1) DEFAULT 1,
+                last_key_rotation TIMESTAMP NULL,
+                api_key_rotation_required TINYINT(1) DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_api_key (api_key),
+                INDEX idx_active (is_active)
             )",
             "configurations" => "CREATE TABLE IF NOT EXISTS configurations (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -68,6 +85,7 @@ function initializeDatabase()
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
                 INDEX idx_game_config (game_id, config_key),
+                INDEX idx_game_active (game_id, is_active),
                 UNIQUE KEY unique_game_config (game_id, config_key)
             )",
             "users" => "CREATE TABLE IF NOT EXISTS users (
@@ -75,8 +93,32 @@ function initializeDatabase()
                 username VARCHAR(255) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
                 email VARCHAR(255),
+                last_login TIMESTAMP NULL,
+                login_attempts INT DEFAULT 0,
+                locked_until TIMESTAMP NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_username (username),
+                INDEX idx_locked (locked_until)
+            )",
+            "rate_limits" => "CREATE TABLE IF NOT EXISTS rate_limits (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ip_address VARCHAR(45) NOT NULL,
+                endpoint VARCHAR(255) NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_ip_endpoint_timestamp (ip_address, endpoint, timestamp)
+            )",
+            "audit_log" => "CREATE TABLE IF NOT EXISTS audit_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                action VARCHAR(100) NOT NULL,
+                user_id INT,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                details JSON,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user_action (user_id, action),
+                INDEX idx_timestamp (timestamp),
+                INDEX idx_action (action)
             )"
         ];
 

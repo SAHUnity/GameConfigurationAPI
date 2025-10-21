@@ -19,26 +19,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// Set headers after includes to avoid any potential output issues
+// Enhanced security headers
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Content-Security-Policy: default-src \'self\'');
-// Additional security headers
-header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
-header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
-// Handle CORS
+// Enhanced CSP Header
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'");
+
+// HSTS Header (only in production)
+if (!defined('ENVIRONMENT') || ENVIRONMENT !== 'development') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+}
+
+// Additional security headers
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()');
+header('Cross-Origin-Embedder-Policy: require-corp');
+header('Cross-Origin-Opener-Policy: same-origin');
+header('Cross-Origin-Resource-Policy: same-origin');
+
+// Enhanced CORS handling
 $allowedOrigins = explode(',', ALLOWED_ORIGINS);
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
 
 if ($origin && in_array($origin, $allowedOrigins)) {
     header('Access-Control-Allow-Origin: ' . $origin);
+    header('Access-Control-Allow-Credentials: false');
+    header('Vary: Origin');
 } else {
-    // For development, you might want to allow all origins, but in production, be specific
-    header('Access-Control-Allow-Origin: ' . (in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1']) ? '*' : $allowedOrigins[0] ?? 'null'));
+    // More restrictive CORS - no wildcard for localhost
+    if (in_array($clientIP, ['127.0.0.1', '::1']) && defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+        // Only allow specific development origins
+        $devOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://localhost:3000', 'https://127.0.0.1:3000'];
+        if (in_array($origin, $devOrigins)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Access-Control-Allow-Credentials: false');
+            header('Vary: Origin');
+        } else {
+            header('Access-Control-Allow-Origin: ' . ($allowedOrigins[0] ?? 'null'));
+        }
+    } else {
+        header('Access-Control-Allow-Origin: ' . ($allowedOrigins[0] ?? 'null'));
+    }
 }
 
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -137,13 +162,22 @@ try {
         }
     }
 
-    // Validate API key format
-    if ($apiKey === null || empty($apiKey) || !isValidApiKey($apiKey)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing or invalid API key format. Use api_key parameter or X-API-Key header.']);
+    // Enhanced API key validation
+    if ($apiKey === null || empty($apiKey)) {
+        http_response_code(401);
+        echo json_encode(['error' => 'API key required. Use api_key parameter or X-API-Key header.']);
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
-        logApiRequest($sanitizedUri, ['ip' => $clientIP], 400, $clientIP);
+        logApiRequest($sanitizedUri, ['ip' => $clientIP], 401, $clientIP);
+        exit();
+    }
+
+    if (!isValidApiKey($apiKey)) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Invalid API key format.']);
+        $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
+        $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
+        logApiRequest($sanitizedUri, ['ip' => $clientIP, 'reason' => 'invalid_format'], 401, $clientIP);
         exit();
     }
 
@@ -167,17 +201,44 @@ try {
         exit();
     }
 
-    // Process configs to handle potential JSON values
+    // Enhanced config processing with security validation
     $processedConfigs = [];
     foreach ($result['configs'] as $key => $value) {
+        // Validate config key format
+        if (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $key)) {
+            error_log("Invalid config key format detected: $key");
+            continue; // Skip invalid keys
+        }
+
         // Try to decode the value as JSON to see if it's actually JSON
         $decodedValue = json_decode($value, true);
         if (json_last_error() === JSON_ERROR_NONE) {
             // If it's valid JSON, store as the actual decoded value
             $processedConfigs[$key] = $decodedValue;
         } else {
-            // If not valid JSON, keep as string
-            $processedConfigs[$key] = $value;
+            // Enhanced validation for string values
+            $sanitizedValue = sanitizeConfigValue($value);
+
+            // Check for potentially dangerous content
+            $dangerousPatterns = [
+                '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi',
+                '/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/mi',
+                '/javascript:/i',
+                '/on\w+\s*=/i'
+            ];
+
+            $isSafe = true;
+            foreach ($dangerousPatterns as $pattern) {
+                if (preg_match($pattern, $sanitizedValue)) {
+                    $isSafe = false;
+                    error_log("Dangerous content detected in config value for key: $key");
+                    break;
+                }
+            }
+
+            if ($isSafe) {
+                $processedConfigs[$key] = $sanitizedValue;
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-# Game Configuration API - .htaccess
+# Game Configuration API - Enhanced Security .htaccess
 
 # Block access to sensitive files
 <Files ".env">
@@ -6,11 +6,32 @@
     Deny from all
 </Files>
 
-# Security headers
+<Files "*.log">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "config.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Block access to backup files
+<Files ~ "\.(bak|backup|old|tmp|save)$">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Enhanced security headers
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options nosniff
     Header always set X-Frame-Options DENY
     Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+    
+    # HSTS Header (uncomment when HTTPS is properly configured)
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 </IfModule>
 
 # Block access to sensitive directories
@@ -18,3 +39,56 @@
     Order allow,deny
     Deny from all
 </Directory>
+
+<Directory "logs">
+    Order allow,deny
+    Deny from all
+</Directory>
+
+<Directory "rate_limit">
+    Order allow,deny
+    Deny from all
+</Directory>
+
+# Prevent directory listing
+Options -Indexes
+
+# Disable server signature
+ServerSignature Off
+
+# Limit request methods to only those needed
+<LimitExcept GET POST OPTIONS>
+    Deny from all
+</LimitExcept>
+
+# Protect against common attack patterns
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Block suspicious user agents
+    RewriteCond %{HTTP_USER_AGENT} ^(bot|crawl|spider|scraper) [NC,OR]
+    RewriteCond %{HTTP_USER_AGENT} ^$
+    RewriteRule .* - [F,L]
+    
+    # Block requests to sensitive files
+    RewriteRule ^(config|\.env|.*\.log)$ - [F,L]
+    
+    # Prevent HTTP methods that aren't needed
+    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG|OPTIONS)$
+    RewriteRule .* - [F,L]
+</IfModule>
+
+# PHP security settings
+<IfModule mod_php7.c>
+    php_flag expose_php off
+    php_flag display_errors off
+    php_flag log_errors on
+    php_value error_log /dev/null
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_flag expose_php off
+    php_flag display_errors off
+    php_flag log_errors on
+    php_value error_log /dev/null
+</IfModule>

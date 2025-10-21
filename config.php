@@ -25,14 +25,18 @@ define('APP_NAME', 'Game Configuration API');
 define('API_VERSION', '1.0');
 define('BASE_URL', $_ENV['BASE_URL'] ?? $_SERVER['BASE_URL'] ?? '');
 
-// Security
+// Security - CRITICAL: Never use default passwords in production
 define('ADMIN_USERNAME', $_ENV['ADMIN_USERNAME'] ?? $_SERVER['ADMIN_USERNAME'] ?? 'admin');
-define('ADMIN_PASSWORD', $_ENV['ADMIN_PASSWORD'] ?? $_SERVER['ADMIN_PASSWORD'] ?? 'SecurePassword123!'); // In production, change this default password and use proper hashing
 
-// Check if using default password and log warning
-if (defined('ADMIN_PASSWORD') && ADMIN_PASSWORD === 'SecurePassword123!') {
-    error_log("WARNING: Default admin password detected in config.php. Change immediately for production use!");
+// More secure default password handling
+$defaultPassword = $_ENV['ADMIN_PASSWORD'] ?? $_SERVER['ADMIN_PASSWORD'] ?? null;
+if ($defaultPassword === null || $defaultPassword === 'SecurePassword123!') {
+    // Generate a random secure password if none is provided or default is used
+    $defaultPassword = bin2hex(random_bytes(16));
+    error_log("SECURITY ALERT: No secure admin password provided. Generated temporary password: $defaultPassword");
+    error_log("SECURITY ALERT: Set ADMIN_PASSWORD environment variable immediately!");
 }
+define('ADMIN_PASSWORD', $defaultPassword);
 
 // Logging configuration
 define('ENABLE_API_LOGGING', ($_ENV['ENABLE_API_LOGGING'] ?? $_SERVER['ENABLE_API_LOGGING'] ?? 'true') === 'true');
@@ -40,11 +44,15 @@ define('ENABLE_SECURITY_LOGGING', ($_ENV['ENABLE_SECURITY_LOGGING'] ?? $_SERVER[
 
 define('ALLOWED_ORIGINS', $_ENV['ALLOWED_ORIGINS'] ?? $_SERVER['ALLOWED_ORIGINS'] ?? 'https://localhost,https://127.0.0.1'); // Comma-separated list of allowed origins
 
+// Environment detection
+define('ENVIRONMENT', $_ENV['ENVIRONMENT'] ?? $_SERVER['ENVIRONMENT'] ?? 'production');
+
 // Error reporting
-if (defined('ENVIRONMENT') && ENVIRONMENT === 'development') {
+if (ENVIRONMENT === 'development') {
     error_reporting(E_ALL);
     ini_set('display_errors', 1);
 } else {
-    error_reporting(0);
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
     ini_set('display_errors', 0);
+    ini_set('log_errors', 1);
 }

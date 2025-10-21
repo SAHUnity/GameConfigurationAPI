@@ -61,10 +61,12 @@ The system is designed to work with subdomains and subdirectories:
 
 ## Default Admin Credentials
 
-- Username: `admin`
-- Password: `password123`
+⚠️ **Important Security Notice:** The system now generates secure random passwords if no `ADMIN_PASSWORD` environment variable is set. Check your error logs for the generated password during first installation.
 
-**Important:** Change the default password immediately after installation!
+- Username: `admin`
+- Password: Check error logs or set `ADMIN_PASSWORD` environment variable
+
+**Critical:** Set a strong admin password via environment variable before production deployment!
 
 ## API Usage
 
@@ -123,21 +125,62 @@ Content-Type: application/json
 
 ## Security Notes
 
-- Change the default admin password after installation
-- For production, set ADMIN_PASSWORD via environment variable rather than using defaults
-- The API checks for active games and configurations before returning them
-- Input validation and sanitization is performed
-- Rate limiting prevents API abuse and spamming
-- CSRF protection added to all admin forms
-- XSS protection with output sanitization
-- Proper session management with security cookie settings
-- SQL injection prevention with PDO prepared statements
-- Rate limiting and IP-based security checks
-- Consider restricting access to the admin panel via IP whitelisting
+### Enhanced Security Features Implemented
+
+✅ **Authentication & Session Security**
+- Secure password handling with automatic generation of strong passwords if none provided
+- HTTPS enforcement for admin sessions in production
+- Enhanced session management with IP and User Agent validation
+- CSRF protection on all admin forms
+- Rate limiting for login attempts (10 attempts per 5 minutes)
+
+✅ **API Security**
+- Enhanced API key validation with detailed error handling
+- Database-backed rate limiting with file-based fallback
+- Input validation with XSS protection for configuration values
+- JSON validation for configuration data
+- Comprehensive security headers (CSP, HSTS, X-Frame-Options, etc.)
+
+✅ **Database Security**
+- Secure PDO connections with SSL verification
+- Strict SQL mode for additional protection
+- Enhanced database schema with security-focused indexes
+- Audit logging for sensitive operations
+- Prepared statements to prevent SQL injection
+
+✅ **File System Protection**
+- Enhanced .htaccess rules blocking access to sensitive files
+- Protection against common attack patterns
+- Directory access restrictions
+- PHP security hardening
+
+### Security Configuration
+
+- **Change the default admin password** immediately after installation
+- Set `ADMIN_PASSWORD` via environment variable for production
+- Set `ENVIRONMENT=production` for production deployments
+- Configure `ALLOWED_ORIGINS` with specific domains for CORS
 - Use HTTPS in production environments
-- Validate and sanitize all inputs
-- CORS policy configured with specific allowed origins (set in ALLOWED_ORIGINS environment variable)
-- Configurable logging to prevent storage overflow (see logging section below)
+- Consider restricting access to the admin panel via IP whitelisting
+
+### Security Headers
+The system now includes comprehensive security headers:
+- Content Security Policy (CSP)
+- HTTP Strict Transport Security (HSTS) in production
+- X-Frame-Options, X-Content-Type-Options, X-XSS-Protection
+- Referrer Policy and Permissions Policy
+
+### Rate Limiting
+- API requests: 60 per minute per IP (configurable)
+- Login attempts: 10 per 5 minutes per IP
+- Database-backed storage with automatic cleanup
+- Enhanced logging for security events
+
+### Audit & Monitoring
+- Comprehensive logging of API requests and security events
+- Configurable logging (`ENABLE_API_LOGGING`, `ENABLE_SECURITY_LOGGING`)
+- Security event tracking for failed logins, rate limit violations
+- Database audit trail for sensitive operations
 
 ### Logging Configuration
 
