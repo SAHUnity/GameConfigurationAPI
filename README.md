@@ -171,8 +171,8 @@ The system now includes comprehensive security headers:
 - Referrer Policy and Permissions Policy
 
 ### Rate Limiting
-- API requests: 60 per minute per IP (configurable)
-- Login attempts: 10 per 5 minutes per IP
+- API requests: 60 per minute per IP (configurable via `API_RATE_LIMIT` and `API_RATE_WINDOW`)
+- Login attempts: 10 per 5 minutes per IP (configurable via `LOGIN_RATE_LIMIT` and `LOGIN_RATE_WINDOW`)
 - Database-backed storage with automatic cleanup
 - Enhanced logging for security events
 
@@ -182,14 +182,32 @@ The system now includes comprehensive security headers:
 - Security event tracking for failed logins, rate limit violations
 - Database audit trail for sensitive operations
 
-### Logging Configuration
+### Advanced Configuration Options
 
-The system supports configurable logging to help prevent storage overflow when running multiple APIs on the same hosting account:
+The system supports comprehensive configuration through environment variables for maximum flexibility in production environments:
 
+#### Rate Limiting Configuration
+- `API_RATE_LIMIT`: Number of API requests allowed per time window (default: 60)
+- `API_RATE_WINDOW`: Time window in seconds for API rate limiting (default: 300 = 5 minutes)
+- `LOGIN_RATE_LIMIT`: Number of login attempts allowed per time window (default: 10)
+- `LOGIN_RATE_WINDOW`: Time window in seconds for login rate limiting (default: 300 = 5 minutes)
+
+#### Session Configuration
+- `SESSION_TIMEOUT`: Session timeout in seconds (default: 3600 = 1 hour)
+- `SESSION_REGENERATION_INTERVAL`: Session regeneration interval in seconds (default: 1800 = 30 minutes)
+- `CSRF_TOKEN_LIFETIME`: CSRF token lifetime in seconds (default: 3600 = 1 hour)
+
+#### Database Configuration
+- `DB_WAIT_TIMEOUT`: Database wait timeout in seconds (default: 30)
+- `DB_INTERACTIVE_TIMEOUT`: Database interactive timeout in seconds (default: 30)
+
+#### Logging Configuration
 - `ENABLE_API_LOGGING`: Set to 'true' to log API requests, 'false' to disable (default: true)
-- `ENABLE_SECURITY_LOGGING`: Set to 'true' to log security events (rate limits, failed logins, etc.), 'false' to disable (default: true)
+- `ENABLE_SECURITY_LOGGING`: Set to 'true' to log security events, 'false' to disable (default: true)
+- `LOG_MAX_SIZE`: Maximum log file size in bytes (default: 10485760 = 10MB)
+- `LOGIN_DELAY_MICROSECONDS`: Login delay in microseconds to prevent brute force (default: 500000 = 0.5 seconds)
 
-When running multiple APIs that share storage space, you can disable logging for lower-priority APIs by setting these variables to 'false'. This helps conserve storage space while keeping critical APIs functional.
+When running multiple APIs that share storage space, you can disable logging for lower-priority APIs by setting `ENABLE_API_LOGGING` or `ENABLE_SECURITY_LOGGING` to 'false'. This helps conserve storage space while keeping critical APIs functional.
 
 ### Configuring Allowed Origins (CORS)
 
