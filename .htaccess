@@ -1,22 +1,17 @@
 # Game Configuration API - Enhanced Security .htaccess
 
 # Block access to sensitive files
-<Files ".env">
+<FilesMatch "^\.env$">
     Require all denied
-</Files>
+</FilesMatch>
 
-<Files "*.log">
+<FilesMatch "\.(log|bak|backup|old|tmp|save)$">
     Require all denied
-</Files>
+</FilesMatch>
 
-<Files "config.php">
+<FilesMatch "^config\.php$">
     Require all denied
-</Files>
-
-# Block access to backup files
-<Files ~ "\.(bak|backup|old|tmp|save)$">
-    Require all denied
-</Files>
+</FilesMatch>
 
 # Enhanced security headers
 <IfModule mod_headers.c>
@@ -26,22 +21,15 @@
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
     
-    # HSTS Header (uncomment when HTTPS is properly configured)
-    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    # ONLY uncomment HSTS when HTTPS is fully working:
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 </IfModule>
 
 # Block access to sensitive directories
-<Directory "database">
-    Require all denied
-</Directory>
-
-<Directory "logs">
-    Require all denied
-</Directory>
-
-<Directory "rate_limit">
-    Require all denied
-</Directory>
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(database|logs|rate_limit)/ - [F,L]
+</IfModule>
 
 # Prevent directory listing
 Options -Indexes
@@ -49,26 +37,34 @@ Options -Indexes
 # Disable server signature
 ServerSignature Off
 
-# Limit request methods to only those needed
-<LimitExcept GET POST OPTIONS>
-    Deny from all
+# Limit request methods to only GET and POST (no OPTIONS for game API)
+<LimitExcept GET POST>
+    Require all denied
 </LimitExcept>
 
-# Protect against common attack patterns
+# Game API Protection - Block all bots and suspicious activity
 <IfModule mod_rewrite.c>
     RewriteEngine On
     
-    # Block suspicious user agents
-    RewriteCond %{HTTP_USER_AGENT} ^(bot|crawl|spider|scraper) [NC,OR]
+    # Block ALL bots - search engines, crawlers, scrapers
+    RewriteCond %{HTTP_USER_AGENT} (bot|crawl|spider|scraper|slurp|google|bing|yahoo|baidu|yandex|duckduck|archive|wget|curl) [NC,OR]
     RewriteCond %{HTTP_USER_AGENT} ^$
     RewriteRule .* - [F,L]
     
-    # Block requests to sensitive files
-    RewriteRule ^(config|\.env|.*\.log)$ - [F,L]
-    
-    # Prevent HTTP methods that aren't needed
-    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG|OPTIONS)$
+    # Block malicious patterns in query strings
+    RewriteCond %{QUERY_STRING} (<|%3C).*script.*(>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} GLOBALS(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} _REQUEST(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} (\.\.\/|\.\.\\|union|select|insert|drop|update|delete) [NC]
     RewriteRule .* - [F,L]
+    
+    # Block suspicious HTTP methods
+    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG|OPTIONS|PUT|DELETE|CONNECT)$
+    RewriteRule .* - [F,L]
+    
+    # Block direct IP access (optional - uncomment if you want to force domain access only)
+    # RewriteCond %{HTTP_HOST} ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$
+    # RewriteRule .* - [F,L]
 </IfModule>
 
 # PHP security settings
@@ -76,5 +72,20 @@ ServerSignature Off
     php_flag expose_php off
     php_flag display_errors off
     php_flag log_errors on
-    php_value error_log /dev/null
+    # Set proper log path or remove this line to use php.ini default
+    # php_value error_log logs/php_errors.log
 </IfModule>
+
+# Additional protection against common exploits
+<IfModule mod_rewrite.c>
+    # Block access attempts to common exploit paths
+    RewriteCond %{REQUEST_URI} (\.php/|\.asp/|\.jsp/) [NC,OR]
+    RewriteCond %{REQUEST_URI} (eval\(|base64_|gzinflate|str_rot13) [NC,OR]
+    RewriteCond %{REQUEST_URI} (phpinfo|php_uname|chmod|chown|chgrp) [NC]
+    RewriteRule .* - [F,L]
+</IfModule>
+
+# Prevent access to version control and config files
+<FilesMatch "(\.(git|svn|htaccess|htpasswd)|composer\.(json|lock)|package(-lock)?\.json)$">
+    Require all denied
+</FilesMatch>
