@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 // Utility functions for the admin panel
 
 // Include API config to get database functions

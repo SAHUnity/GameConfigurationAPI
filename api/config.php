@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 // Database connection configuration
 
 // Use PDO for database connection
@@ -28,8 +30,8 @@ function getDBConnection()
             $pdo->exec("SET sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION,ONLY_FULL_GROUP_BY'");
             
             // Set timeout to prevent hanging connections
-            $pdo->exec("SET SESSION wait_timeout = " . DB_WAIT_TIMEOUT);
-            $pdo->exec("SET SESSION interactive_timeout = " . DB_INTERACTIVE_TIMEOUT);
+            $pdo->exec("SET SESSION wait_timeout = " . (string)DB_WAIT_TIMEOUT);
+            $pdo->exec("SET SESSION interactive_timeout = " . (string)DB_INTERACTIVE_TIMEOUT);
             
         } catch (PDOException $e) {
             // Log detailed error but show generic message to user
@@ -50,6 +52,12 @@ function getDBConnection()
 // Function to initialize the database if it doesn't exist
 function initializeDatabase()
 {
+    // Optimization: Check for lock file to avoid redundant checks
+    $lockFile = __DIR__ . '/../installed.lock';
+    if (file_exists($lockFile)) {
+        return;
+    }
+
     try {
         // Connect to MySQL server without specifying database
         $dsn = "mysql:host=" . DB_HOST . ";charset=utf8mb4";
@@ -165,6 +173,10 @@ function initializeDatabase()
                 $stmt->execute([$apiKey, $gameId]);
             }
         }
+
+        // Create lock file to indicate successful initialization
+        file_put_contents($lockFile, 'Installed on ' . date('Y-m-d H:i:s'));
+
     } catch (PDOException $e) {
         error_log("Database initialization failed: " . $e->getMessage());
         die("Database initialization failed. Please check your configuration.");

@@ -1,5 +1,10 @@
 <?php
+declare(strict_types=1);
+
 // Main API endpoint for fetching game configurations
+
+// Output buffering to prevent accidental whitespace injection
+ob_start();
 
 // Include config and database connection FIRST to avoid any output before headers
 require_once __DIR__ . '/../config.php';
@@ -11,6 +16,8 @@ initializeDatabase();
 
 // Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    // Clear buffer before sending headers
+    ob_end_clean();
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -70,16 +77,13 @@ header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization');
 header('Access-Control-Allow-Credentials: false'); // Don't allow credentials unless necessary
 
-// Functions moved to api/functions.php to avoid duplication
-
 // Rate limiting and security checks
 $clientIP = getClientIP();
 
 // Check if rate limited
 if (isRateLimited($clientIP, API_RATE_WINDOW, API_RATE_LIMIT)) {
-    http_response_code(429);
-    echo json_encode(['error' => 'Rate limit exceeded. Please try again later.']);
-    exit();
+    ob_end_clean();
+    sendJsonResponse(['error' => 'Rate limit exceeded. Please try again later.'], 429);
 }
 
 // Log the API request (without exposing API key in URL)
@@ -104,10 +108,9 @@ try {
         if (!empty($jsonInput)) {
             $input = json_decode($jsonInput, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Invalid JSON in request body']);
+                ob_end_clean();
                 logApiRequest($_SERVER['REQUEST_URI'] ?? 'unknown', ['ip' => $clientIP, 'json_error' => json_last_error_msg()], 400, $clientIP);
-                exit();
+                sendJsonResponse(['error' => 'Invalid JSON in request body'], 400);
             }
             if (isset($input['api_key'])) {
                 $apiKey = trim($input['api_key']);
@@ -117,41 +120,62 @@ try {
 
     // Enhanced API key validation
     if ($apiKey === null || empty($apiKey)) {
-        http_response_code(401);
-        echo json_encode(['error' => 'API key required. Use api_key parameter or X-API-Key header.']);
+        ob_end_clean();
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
         logApiRequest($sanitizedUri, ['ip' => $clientIP], 401, $clientIP);
-        exit();
+        sendJsonResponse(['error' => 'API key required. Use api_key parameter or X-API-Key header.'], 401);
     }
 
     if (!isValidApiKey($apiKey)) {
-        http_response_code(401);
-        echo json_encode(['error' => 'Invalid API key format.']);
+        ob_end_clean();
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
         logApiRequest($sanitizedUri, ['ip' => $clientIP, 'reason' => 'invalid_format'], 401, $clientIP);
-        exit();
+        sendJsonResponse(['error' => 'Invalid API key format.'], 401);
+    }
+
+    // --- File-Based Caching Implementation ---
+    $cacheDir = __DIR__ . '/cache';
+    if (!is_dir($cacheDir)) {
+        mkdir($cacheDir, 0750, true);
+        file_put_contents($cacheDir . '/.htaccess', "Require all denied\n");
+    }
+
+    $cacheKey = hash('sha256', $apiKey);
+    $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
+    $cacheDuration = defined('CACHE_DURATION') ? CACHE_DURATION : 300;
+
+    // Check cache
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < $cacheDuration)) {
+        $cachedContent = file_get_contents($cacheFile);
+        $decodedCache = json_decode($cachedContent, true);
+        
+        if ($decodedCache !== null) {
+            ob_end_clean();
+            // Add X-Cache header to indicate cache hit
+            header('X-Cache: HIT');
+            echo $cachedContent;
+            exit();
+        }
     }
 
     $result = getGameConfigByApiKey($apiKey);
 
     if ($result === false) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Service temporarily unavailable']);
+        ob_end_clean();
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
         logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error_type' => 'database_error'], 500, $clientIP);
-        exit();
+        sendJsonResponse(['error' => 'Service temporarily unavailable'], 500);
     }
 
     if ($result === null) {
-        http_response_code(401); // Use 401 instead of 404 to not reveal if game exists
-        echo json_encode(['error' => 'Invalid API key']);
+        ob_end_clean();
         $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
         $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
         logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error_type' => 'invalid_api_key'], 401, $clientIP);
-        exit();
+        sendJsonResponse(['error' => 'Invalid API key'], 401);
     }
 
     // Enhanced config processing with security validation
@@ -216,14 +240,21 @@ try {
     $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
     logApiRequest($sanitizedUri, ['ip' => $clientIP], 200, $clientIP);
 
-    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    // Save to cache
+    $jsonResponse = json_encode($response, JSON_UNESCAPED_UNICODE);
+    file_put_contents($cacheFile, $jsonResponse);
+
+    ob_end_clean();
+    header('X-Cache: MISS');
+    echo $jsonResponse;
+    exit();
+
 } catch (Exception $e) {
+    ob_end_clean();
     // Don't expose detailed error information in production
     error_log("API Error: " . $e->getMessage());
-    http_response_code(500);
-    echo json_encode(['error' => 'Service temporarily unavailable']);
     $requestUri = $_SERVER['REQUEST_URI'] ?? 'unknown';
     $sanitizedUri = preg_replace('/([?&])api_key=[^&]*/', '$1api_key=HIDDEN', $requestUri);
     logApiRequest($sanitizedUri, ['ip' => $clientIP, 'error_type' => 'exception'], 500, $clientIP);
-    exit();
+    sendJsonResponse(['error' => 'Service temporarily unavailable'], 500);
 }

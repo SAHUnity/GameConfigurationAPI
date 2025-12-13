@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 // Main configuration file
 
 // Load environment variables from .env file if it exists
@@ -24,6 +26,7 @@ define('DB_NAME', $_ENV['DB_NAME'] ?? $_SERVER['DB_NAME'] ?? 'game_config');
 define('APP_NAME', 'Game Configuration API');
 define('API_VERSION', '1.0');
 define('BASE_URL', $_ENV['BASE_URL'] ?? $_SERVER['BASE_URL'] ?? '');
+define('CACHE_DURATION', (int)($_ENV['CACHE_DURATION'] ?? $_SERVER['CACHE_DURATION'] ?? 300)); // Cache duration in seconds
 
 // Security - CRITICAL: Never use default passwords in production
 define('ADMIN_USERNAME', $_ENV['ADMIN_USERNAME'] ?? $_SERVER['ADMIN_USERNAME'] ?? 'admin');

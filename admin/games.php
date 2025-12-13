@@ -1,6 +1,10 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
+// Include API functions for cache invalidation
+require_once __DIR__ . '/../api/functions.php';
 
 requireLogin();
 
@@ -86,6 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     $stmt = $pdo->prepare("UPDATE games SET name=?, description=? WHERE id=?");
                     $stmt->execute([sanitizeInput($name), sanitizeInput($description), $id]);
+                    
+                    // Invalidate cache for this game (name might be used in some responses)
+                    clearGameCache($id);
+                    
                     $message = 'Game updated successfully';
                     // Regenerate CSRF token after successful action
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -100,8 +108,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Valid game ID is required';
             } else {
                 try {
+                    // Get API key before deletion to clear cache
+                    $stmt = $pdo->prepare("SELECT api_key FROM games WHERE id = ?");
+                    $stmt->execute([$id]);
+                    $apiKey = $stmt->fetchColumn();
+
                     $stmt = $pdo->prepare("DELETE FROM games WHERE id=?");
                     $stmt->execute([$id]);
+                    
+                    // Invalidate cache
+                    if ($apiKey) {
+                        clearCacheByApiKey($apiKey);
+                    }
+                    
                     $message = 'Game deleted successfully';
                     // Regenerate CSRF token after successful action
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -116,9 +135,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Valid game ID is required';
             } else {
                 try {
+                    // Get old API key to clear cache
+                    $stmt = $pdo->prepare("SELECT api_key FROM games WHERE id = ?");
+                    $stmt->execute([$id]);
+                    $oldApiKey = $stmt->fetchColumn();
+
                     $newApiKey = generateApiKey();
                     $stmt = $pdo->prepare("UPDATE games SET api_key = ? WHERE id = ?");
                     $stmt->execute([$newApiKey, $id]);
+                    
+                    // Invalidate cache for old key
+                    if ($oldApiKey) {
+                        clearCacheByApiKey($oldApiKey);
+                    }
+                    
                     $message = 'API key regenerated successfully';
                     // Regenerate CSRF token after successful action
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

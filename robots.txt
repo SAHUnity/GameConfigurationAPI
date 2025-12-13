@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /api/
+Disallow: /includes/
+Disallow: /logs/
+Disallow: /cache/
+Disallow: /*.json$
+Disallow: /*.lock$
+Disallow: /*.log$

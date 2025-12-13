@@ -1,6 +1,10 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/includes/functions.php';
+// Include API functions for cache invalidation
+require_once __DIR__ . '/../api/functions.php';
 
 requireLogin();
 
@@ -87,6 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         sanitizeInput($description),
                         sanitizeInput($isActive, 'int')
                     ]);
+                    
+                    // Invalidate cache for this game
+                    clearGameCache($gameId);
+                    
                     $message = 'Configuration added successfully';
                     // Regenerate CSRF token after successful action
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -162,6 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = implode(', ', $errors);
             } else {
                 try {
+                    // Get old game_id to invalidate cache if game changed
+                    $stmt = $pdo->prepare("SELECT game_id FROM configurations WHERE id = ?");
+                    $stmt->execute([$id]);
+                    $oldGameId = (int)$stmt->fetchColumn();
+
                     $stmt = $pdo->prepare("UPDATE configurations SET game_id=?, config_key=?, config_value=?, description=?, is_active=? WHERE id=?");
                     $stmt->execute([
                         sanitizeInput($gameId, 'int'),
@@ -171,6 +184,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         sanitizeInput($isActive, 'int'),
                         sanitizeInput($id, 'int')
                     ]);
+                    
+                    // Invalidate cache for both old and new game IDs
+                    clearGameCache($gameId);
+                    if ($oldGameId !== $gameId) {
+                        clearGameCache($oldGameId);
+                    }
+
                     $message = 'Configuration updated successfully';
                     // Regenerate CSRF token after successful action
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -187,8 +207,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($id > 0) {
                 try {
+                    // Get game_id before deletion for cache invalidation
+                    $stmt = $pdo->prepare("SELECT game_id FROM configurations WHERE id = ?");
+                    $stmt->execute([$id]);
+                    $gameId = (int)$stmt->fetchColumn();
+
                     $stmt = $pdo->prepare("DELETE FROM configurations WHERE id=?");
                     $stmt->execute([sanitizeInput($id, 'int')]);
+                    
+                    // Invalidate cache
+                    if ($gameId > 0) {
+                        clearGameCache($gameId);
+                    }
+
                     $message = 'Configuration deleted successfully';
                     // Regenerate CSRF token after successful action
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

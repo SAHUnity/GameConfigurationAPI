@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 // Utility functions for the API
 
 // Function to validate input with enhanced security checks
@@ -7,7 +9,7 @@ function validateInput($data, $requiredFields = [], $optionalValidation = [])
     $errors = [];
 
     foreach ($requiredFields as $field) {
-        if (!isset($data[$field]) || empty(trim($data[$field]))) {
+        if (!isset($data[$field]) || empty(trim((string)$data[$field]))) {
             $errors[] = "Required field '$field' is missing or empty";
         }
     }
@@ -18,12 +20,12 @@ function validateInput($data, $requiredFields = [], $optionalValidation = [])
             foreach ($rules as $rule => $ruleValue) {
                 switch ($rule) {
                     case 'max_length':
-                        if (strlen($data[$field]) > $ruleValue) {
+                        if (strlen((string)$data[$field]) > $ruleValue) {
                             $errors[] = "Field '$field' exceeds maximum length of $ruleValue characters";
                         }
                         break;
                     case 'min_length':
-                        if (strlen($data[$field]) < $ruleValue) {
+                        if (strlen((string)$data[$field]) < $ruleValue) {
                             $errors[] = "Field '$field' is shorter than minimum length of $ruleValue characters";
                         }
                         break;
@@ -37,7 +39,7 @@ function validateInput($data, $requiredFields = [], $optionalValidation = [])
                         }
                         break;
                     case 'regex':
-                        if (!preg_match($ruleValue, $data[$field])) {
+                        if (!preg_match($ruleValue, (string)$data[$field])) {
                             $errors[] = "Field '$field' does not match required format";
                         }
                         break;
@@ -57,7 +59,7 @@ function sanitizeInput($input, $type = 'string')
             return sanitizeInput($value, $type);
         }, $input);
     } else {
-        $input = trim($input);
+        $input = trim((string)$input);
 
         switch ($type) {
             case 'string':
@@ -82,7 +84,7 @@ function sanitizeInput($input, $type = 'string')
 function sanitizeConfigValue($value)
 {
     // Remove any potential script tags but preserve JSON formatting
-    $value = strip_tags($value, '<br><br/><p><div><span><strong><em><b><i>'); // Allow some safe HTML tags if needed
+    $value = strip_tags((string)$value, '<br><br/><p><div><span><strong><em><b><i>'); // Allow some safe HTML tags if needed
 
     // Return without htmlspecialchars to preserve quotes and JSON structure
     return trim($value);
@@ -162,7 +164,7 @@ function ip_in_range($ip, $range) {
     list($range, $netmask) = explode('/', $range, 2);
     $range_decimal = ip2long($range);
     $ip_decimal = ip2long($ip);
-    $wildcard_decimal = pow(2, (32 - $netmask)) - 1;
+    $wildcard_decimal = pow(2, (32 - (int)$netmask)) - 1;
     $mask = ~$wildcard_decimal;
     
     return ($ip_decimal & $mask) === ($range_decimal & $mask);
@@ -200,11 +202,12 @@ function logApiRequest($endpoint, $params, $responseCode, $clientIP = null)
 
     // Sanitize sensitive information from params before logging
     $safeParams = $params;
-    if (isset($safeParams['api_key'])) {
-        $safeParams['api_key'] = '[HIDDEN]';
-    }
-    if (isset($safeParams['password'])) {
-        $safeParams['password'] = '[HIDDEN]';
+    $sensitiveKeys = ['api_key', 'password', 'token', 'secret', 'credit_card', 'cvv'];
+    
+    foreach ($sensitiveKeys as $key) {
+        if (isset($safeParams[$key])) {
+            $safeParams[$key] = '[HIDDEN]';
+        }
     }
 
     $logEntry = [
@@ -248,8 +251,60 @@ function logApiRequest($endpoint, $params, $responseCode, $clientIP = null)
     }
 
     // Also log to system log for additional security
-    error_log('API_ACCESS: ' . $clientIP . ' - ' . $_SERVER['REQUEST_METHOD'] . ' ' . $endpoint . ' - Response: ' . $responseCode, 0);
+    error_log('API_ACCESS: ' . $clientIP . ' - ' . ($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN') . ' ' . $endpoint . ' - Response: ' . $responseCode, 0);
 }
+
+// --- Cache Invalidation Functions ---
+
+function clearGameCache(int $gameId): bool
+{
+    $pdo = getDBConnection();
+    try {
+        $stmt = $pdo->prepare("SELECT api_key FROM games WHERE id = ?");
+        $stmt->execute([$gameId]);
+        $apiKey = $stmt->fetchColumn();
+
+        if ($apiKey) {
+            return clearCacheByApiKey($apiKey);
+        }
+        return false;
+    } catch (PDOException $e) {
+        error_log("Database error in clearGameCache: " . $e->getMessage());
+        return false;
+    }
+}
+
+function clearCacheByApiKey(string $apiKey): bool
+{
+    $cacheDir = __DIR__ . '/cache';
+    $cacheKey = hash('sha256', $apiKey);
+    $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
+
+    if (file_exists($cacheFile)) {
+        return unlink($cacheFile);
+    }
+    return true; // File doesn't exist, so technically cache is clear
+}
+
+function clearAllCache(): bool
+{
+    $cacheDir = __DIR__ . '/cache';
+    if (!is_dir($cacheDir)) {
+        return true;
+    }
+
+    $files = glob($cacheDir . '/*.json');
+    $success = true;
+    foreach ($files as $file) {
+        if (is_file($file)) {
+            if (!unlink($file)) {
+                $success = false;
+            }
+        }
+    }
+    return $success;
+}
+
 
 // Function to send a proper JSON response
 function sendJsonResponse($data, $statusCode = 200)
