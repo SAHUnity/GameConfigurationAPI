@@ -62,10 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $gameId = (int)$_POST['game_id'];
             if ($gameId) {
                 // Delete old cache first
-                $oldGame = Game::getByApiKey($_POST['old_key'] ?? ''); // This logic needs to be robust, but for now we rely on DB
-                // Actually, just regen key, then rebuild/delete cache
-                // To cleanly delete old file, we needed the old key. 
-                // Passed as hidden field for simplicity.
                 if (!empty($_POST['old_key'])) {
                     $cacheService->delete($_POST['old_key']);
                 }

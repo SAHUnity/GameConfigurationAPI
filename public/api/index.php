@@ -144,6 +144,5 @@ try {
 
 } catch (Exception $e) {
     // Don't expose DB errors in production
-    // error_log($e->getMessage()); 
     Response::error("Internal Server Error", 500);
 }

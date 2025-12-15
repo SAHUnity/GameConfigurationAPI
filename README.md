@@ -8,8 +8,10 @@ A production-ready, high-performance REST API designed for shared hosting enviro
 -   **Stateless API**: The "Hot Path" (`/api/v1/...`) is completely stateless (no `session_start`).
 -   **Atomic Updates**: Cache files are written atomically (write temp -> rename) to prevent race conditions during updates.
 -   **Rate Limiting**: File-based token bucket algorithm limits abuse (default: 60/min) without touching the database.
--   **Secure Admin Panel**: Session-protected dashboard to manage games and configurations.
+-   **Secure Admin Panel**: Session-protected dashboard to manage games and configurations, including **Edit/Update** functionality.
 -   **Zero Bloat**: No heavy frameworks. Uses a custom lightweight PSR-4 autoloader.
+-   **Header-Only Auth**: Strictly enforces `X-API-KEY` header for improved security.
+-   **Deployment Tools**: Includes PowerShell tools for stress testing and secure credential generation.
 
 ## 📋 Requirements
 
@@ -116,6 +118,23 @@ $period = 60; // seconds
 ### Cache
 Cache files are stored in `var/cache/`. They are automatically regenerated when you save configs in the Admin Panel. 
 To manually clear the cache, you can delete the contents of `var/cache`.
+
+## 🛠️ Utility Tools
+
+Located in the `tools/` directory:
+
+### 1. Stress Test (`stress_test.ps1`)
+Simulates high traffic to verify performance and rate limiting.
+```powershell
+.\tools\stress_test.ps1 -Url "http://yourdomain.com/api/v1" -Key "YOUR_KEY" -Count 100
+```
+
+### 2. Generate Credentials (`generate_creds.ps1`)
+Generates a secure bcrypt hash for the admin user.
+```powershell
+.\tools\generate_creds.ps1
+```
+Output includes the SQL command to update your `users` table.
 
 ## 🛡️ Security Checklist for Production
 
