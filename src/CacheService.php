@@ -20,17 +20,15 @@ class CacheService
 
     public function refresh(int $gameId): void
     {
-        // 1. Get Game API Key (filename)
         $pdo = Database::getInstance();
         $stmt = $pdo->prepare("SELECT api_key FROM games WHERE id = ?");
         $stmt->execute([$gameId]);
         $apiKey = $stmt->fetchColumn();
 
         if (!$apiKey) {
-            return; // Game might have been deleted
+            return;
         }
 
-        // 2. Fetch all configs
         $configs = Configuration::getAllForGame($gameId);
         $data = [];
         foreach ($configs as $cfg) {
@@ -43,7 +41,6 @@ class CacheService
             $data[$cfg['key_name']] = $val;
         }
 
-        // 3. Write to file atomically
         $this->write($apiKey, $data);
     }
 

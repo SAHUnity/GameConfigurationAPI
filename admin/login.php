@@ -1,7 +1,6 @@
 <?php
 $possiblePaths = [
-    __DIR__ . '/../../', // Standard
-    __DIR__ . '/../',    // Flattened
+    __DIR__ . '/../',    // Standard: admin -> root
 ];
 
 $rootPath = null;

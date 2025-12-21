@@ -5,16 +5,20 @@
     RewriteRule ^(\.git|composer\.json|composer\.lock|package\.json|package-lock\.json) - [F]
 
     # Block access to src and var directories if they are somehow accessible (usually they are outside public_html)
-    # But if User mapped document root to project root erroneously:
-    RewriteRule ^(src|var)/ - [F]
+    # Block sensitive directories
+    RewriteRule ^(src|var|tools|vendor)/ - [F]
+
+    # Block sensitive files by extension or name
+    RewriteRule \.(env|json|lock|md|ps1|yml|xml|log)$ - [F]
+    RewriteRule ^(autoload\.php|setup\.php|composer\.json|composer\.lock)$ - [F]
 
     # API Routing: /api/v1 -> api/index.php
     RewriteRule ^api/v1/?$ api/index.php [L,QSA]
 
     # CORS Headers
     Header set Access-Control-Allow-Origin "*"
-    Header set Access-Control-Allow-Methods "GET, OPTIONS"
-    Header set Access-Control-Allow-Headers "Content-Type, X-API-KEY"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+    Header set Access-Control-Allow-Headers "Content-Type, X-API-KEY, Authorization"
 
     # Block access to .env
     <Files .env>

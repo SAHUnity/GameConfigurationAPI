@@ -27,9 +27,12 @@ A production-ready, high-performance REST API designed for shared hosting enviro
         ```
         /public_html
           ├── .env             (Create this from .env.example)
+          ├── .htaccess
           ├── autoload.php
           ├── setup.php
-          ├── public/
+          ├── index.php
+          ├── admin/
+          ├── api/
           ├── src/
           └── var/
         ```
@@ -61,23 +64,13 @@ A production-ready, high-performance REST API designed for shared hosting enviro
     -   **IMPORTANT**: Change this password immediately via the database (update `users` table with a new bcrypt hash) or use a temporary reset script.
 
 6.  **Directory Security**
-    -   Point your domain's Document Root to the `public/` folder if possible.
-    -   If you are on shared hosting and cannot change the Document Root, the provided `.htaccess` in `public/` helps, but you should ensure `src/`, `var/`, and `.env` are protected. ideally, place the project *one level up* from `public_html` and only link the contents of `public/` to `public_html`.
+    -   The `.htaccess` file included in the root directory is critical. It blocks access to sensitive files like `.env`, `src/`, and `autoload.php`. Ensure your web server allows `.htaccess` overrides.
 
-### Deployment Scenarios
+### Deployment Note
 
-**Scenario 1: `mydomain.com/game-api` (Subfolder)**
-**Scenario 2: `sub.domain.com` (Subdomain Root)**
-
-For both of these, use the **Flattened Structure** (Option B) for the cleanest URLs:
-1.  Create the folder `game-api` (or your subdomain root).
-2.  Upload `src/`, `var/`, `autoload.php`, `setup.php`, and `.env` into it.
-3.  Upload the **contents** of `public/` (`api`, `admin`, `.htaccess`, `index.php`) into it.
-4.  **Result**: You can access files at `mydomain.com/game-api/api/v1` (with Header) and the system works automatically.
-
-**Option A: Standard Structure (Nested)**
-Use this if you want to keep the source code "above" the web root for extra security, or if you don't mind the `/public/` in the URL.
-*   Path: `mydomain.com/game-api/public/`
+The project is designed to run from the root.
+-   **Admin Panel**: `https://yourdomain.com/admin/`
+-   **API Endpoint**: `https://yourdomain.com/api/v1`
 
 ## 📡 API Usage
 
@@ -108,7 +101,7 @@ curl -H "X-API-KEY: a1b2c3d4e5f6..." https://yourdomain.com/api/v1
 ## ⚙️ Configuration
 
 ### Rate Limiting
-To change the rate limit (default 60 req/min), edit `public/api/index.php`:
+To change the rate limit (default 60 req/min), edit `api/index.php`:
 ```php
 // Lines 24-25
 $limit = 60; // requests
@@ -139,6 +132,6 @@ Output includes the SQL command to update your `users` table.
 ## 🛡️ Security Checklist for Production
 
 -   [ ] **Change Default Admin Password**.
--   [ ] **Delete `setup.php`** after running it.
--   [ ] Ensure `var/` directory is writable by the web server (chmod 755 or 775).
--   [ ] Verify that `.env` is NOT accessible via browser (`https://yourdomain.com/.env` should return 403 Forbidden).
+-   [ ] **Delete `setup.php`**.
+-   [ ] Ensure `var/` directory is writable by the web server.
+-   [ ] Verify that sensitive files (`.env`) are NOT accessible via browser.

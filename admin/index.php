@@ -6,10 +6,9 @@ use App\Config;
 use App\Models\Configuration;
 use App\Models\Game;
 
-// 1. Setup & Auth
+// Setup & Auth
 $possiblePaths = [
-    __DIR__ . '/../../', // Standard
-    __DIR__ . '/../',    // Flattened
+    __DIR__ . '/../',
 ];
 
 $rootPath = null;
