@@ -1,18 +1,12 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Block access to git, composer, etc.
-    RewriteRule ^(\.git|composer\.json|composer\.lock|package\.json|package-lock\.json) - [F]
-
-    # Block access to src and var directories if they are somehow accessible (usually they are outside public_html)
-    # Block sensitive directories
-    RewriteRule ^(src|var|tools|vendor)/ - [F]
-
-    # Block sensitive files by extension or name
+    # Block sensitive directories and files
+    RewriteRule ^(src|var|tools|vendor|(\.git))(/|$) - [F]
     RewriteRule \.(env|json|lock|md|ps1|yml|xml|log)$ - [F]
-    RewriteRule ^(autoload\.php|setup\.php|composer\.json|composer\.lock)$ - [F]
+    RewriteRule ^(autoload\.php|composer\.json|composer\.lock)$ - [F]
 
-    # API Routing: /api/v1 -> api/index.php
+    # API Routing
     RewriteRule ^api/v1/?$ api/index.php [L,QSA]
 
     # CORS Headers
@@ -20,7 +14,7 @@
     Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
     Header set Access-Control-Allow-Headers "Content-Type, X-API-KEY, Authorization"
 
-    # Block access to .env
+    # Deep protection for .env
     <Files .env>
         Order allow,deny
         Deny from all
