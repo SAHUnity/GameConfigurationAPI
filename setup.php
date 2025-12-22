@@ -52,14 +52,24 @@ try {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     echo "Table 'users' created/checked.\n";
 
-    // Create Default Admin User
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
-    $stmt->execute(['admin']);
-    if ($stmt->fetchColumn() == 0) {
-        $passHash = password_hash('password', PASSWORD_BCRYPT);
+    // Create/Update Admin User
+    $adminUser = Config::get('ADMIN_USER', 'admin');
+    $adminPass = Config::get('ADMIN_PASSWORD', 'password');
+
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+    $stmt->execute([$adminUser]);
+    $userId = $stmt->fetchColumn();
+
+    $passHash = password_hash($adminPass, PASSWORD_BCRYPT);
+
+    if ($userId) {
+        $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+        $stmt->execute([$passHash, $userId]);
+        echo "Admin user '$adminUser' updated with configured password.\n";
+    } else {
         $stmt = $pdo->prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)");
-        $stmt->execute(['admin', $passHash]);
-        echo "Default admin user created (user: admin, pass: password).\n";
+        $stmt->execute([$adminUser, $passHash]);
+        echo "Admin user '$adminUser' created.\n";
     }
 
     echo "Schema setup completed successfully.\n";

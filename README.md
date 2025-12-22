@@ -43,27 +43,24 @@ A production-ready, high-performance REST API designed for shared hosting enviro
 
 3.  **Configuration**
     -   Rename `.env.example` to `.env`.
-    -   Edit `.env` with your database credentials:
+    -   Edit `.env` with your database and admin credentials:
         ```ini
         DB_HOST=localhost
         DB_NAME=your_cpanel_db_name
         DB_USER=your_cpanel_db_user
         DB_PASS=your_cpanel_db_password
+
+        ADMIN_USER=your_admin_username
+        ADMIN_PASSWORD=your_secure_password
         ```
 
 4.  **Installation**
-    -   Open your browser and verify the path to `setup.php`.
-    -   Usually: `https://yourdomain.com/setup.php` OR if you kept the folder structure strictly, you might need to run it via command line or move it temporarily to `public/` if you can't reach the root.
-    -   **Recommendation**: The safest way is to run `php setup.php` via the cPanel Terminal or SSH.
-    -   If you cannot access SSH, you can temporarily move `setup.php` to `public/setup.php`, run it in the browser, and then **delete it immediately**.
+    -   Run `setup.php` to initialize the database and creating the admin user.
+    -   **Recommended**: Run via command line: `php setup.php`
+    -   **Alternative**: If SSH is unavailable, access via browser (e.g., `https://yourdomain.com/setup.php`) then **delete the file immediately**.
+    -   The script will automatically create the admin user defined in your `.env`. If you change the password in `.env` and run `setup.php` again, it will update the existing user's password.
 
-5.  **Admin User**
-    -   The setup script creates a default user:
-        -   **Username**: `admin`
-        -   **Password**: `password`
-    -   **IMPORTANT**: Change this password immediately via the database (update `users` table with a new bcrypt hash) or use a temporary reset script.
-
-6.  **Directory Security**
+5.  **Directory Security**
     -   The `.htaccess` file included in the root directory is critical. It blocks access to sensitive files like `.env`, `src/`, and `autoload.php`. Ensure your web server allows `.htaccess` overrides.
 
 ### Deployment Note
@@ -103,7 +100,6 @@ curl -H "X-API-KEY: a1b2c3d4e5f6..." https://yourdomain.com/api/v1
 ### Rate Limiting
 To change the rate limit (default 60 req/min), edit `api/index.php`:
 ```php
-// Lines 24-25
 $limit = 60; // requests
 $period = 60; // seconds
 ```
@@ -116,22 +112,14 @@ To manually clear the cache, you can delete the contents of `var/cache`.
 
 Located in the `tools/` directory:
 
-### 1. Stress Test (`stress_test.ps1`)
+### Stress Test (`stress_test.ps1`)
 Simulates high traffic to verify performance and rate limiting.
 ```powershell
 .\tools\stress_test.ps1 -Url "http://yourdomain.com/api/v1" -Key "YOUR_KEY" -Count 100
 ```
 
-### 2. Generate Credentials (`generate_creds.ps1`)
-Generates a secure bcrypt hash for the admin user.
-```powershell
-.\tools\generate_creds.ps1
-```
-Output includes the SQL command to update your `users` table.
-
 ## 🛡️ Security Checklist for Production
 
--   [ ] **Change Default Admin Password**.
--   [ ] **Delete `setup.php`**.
+-   [ ] **Delete `setup.php`** after installation.
 -   [ ] Ensure `var/` directory is writable by the web server.
 -   [ ] Verify that sensitive files (`.env`) are NOT accessible via browser.
