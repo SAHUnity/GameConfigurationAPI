@@ -12,7 +12,6 @@ class Database
 
     private function __construct()
     {
-        // Private constructor to prevent direct instantiation
     }
 
     public static function getInstance(): PDO

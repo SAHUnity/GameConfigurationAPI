@@ -32,7 +32,6 @@ class CacheService
         $configs = Configuration::getAllForGame($gameId);
         $data = [];
         foreach ($configs as $cfg) {
-            // Decode JSON if possible, otherwise string
             $val = $cfg['value'];
             $decoded = json_decode($val, true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -49,18 +48,14 @@ class CacheService
         $filePath = $this->cacheDir . $apiKey . '.php';
         $tempPath = $filePath . '.tmp';
 
-        // Use var_export to create valid PHP code
         $content = "<?php\n\nreturn " . var_export($data, true) . ";\n";
 
         if (file_put_contents($tempPath, $content) === false) {
-            // Log error? 
             return;
         }
 
-        // Atomic rename
         rename($tempPath, $filePath);
         
-        // Invalidate OPcache for this file if it's already loaded
         if (function_exists('opcache_invalidate')) {
             opcache_invalidate($filePath, true);
         }

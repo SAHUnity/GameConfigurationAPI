@@ -122,7 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// 3. Render View
 $games = Game::getAll();
 $activeGameId = (int)($_GET['game_id'] ?? ($_POST['game_id'] ?? 0));
 $activeGame = null;
@@ -152,14 +151,13 @@ if ($activeGameId) {
     <style>
         .sidebar { min-height: 100vh; background: #f8f9fa; border-right: 1px solid #dee2e6; }
         .nav-link.active { background: #e9ecef; }
-        /* Fix table layout issues */
         .table-fixed { table-layout: fixed; width: 100%; }
         .text-truncate-multiline {
             display: -webkit-box;
             -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
-            word-break: break-word; /* Ensure extremely long strings break */
+            word-break: break-word;
         }
         pre.val-preview {
             white-space: pre-wrap;       /* css-3 */
@@ -179,7 +177,6 @@ if ($activeGameId) {
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar: Games List -->
             <div class="col-md-3 col-lg-2 sidebar py-3">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0">Games</h5>
@@ -200,7 +197,6 @@ if ($activeGameId) {
                 </form>
             </div>
 
-            <!-- Main Content -->
             <div class="col-md-9 col-lg-10 py-3">
                 <?php if ($message): ?>
                     <div class="alert alert-success alert-dismissible show"><?= htmlspecialchars($message) ?> <button class="btn-close" data-bs-dismiss="alert"></button></div>
@@ -303,7 +299,6 @@ if ($activeGameId) {
         </div>
     </div>
 
-    <!-- Create Game Modal -->
     <div class="modal fade" id="createGameModal" tabindex="-1">
         <div class="modal-dialog">
             <form method="POST" class="modal-content">
@@ -320,8 +315,7 @@ if ($activeGameId) {
             </form>
         </div>
     </div>
-
-    <!-- Add Config Modal -->
+    
     <?php if ($activeGame): ?>
     <div class="modal fade" id="addConfigModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -352,7 +346,6 @@ if ($activeGameId) {
         </div>
     </div>
     
-    <!-- Edit Config Modal (Same structure, populated via JS) -->
     <div class="modal fade" id="editConfigModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <form method="POST" class="modal-content">

@@ -17,7 +17,6 @@ class Config
         }
 
         if (!file_exists($path)) {
-            // In production, you might rely on server env vars, but for this setup we expect .env
             throw new RuntimeException("Environment file not found: $path");
         }
 
@@ -35,7 +34,6 @@ class Config
             $key = trim($parts[0]);
             $value = trim($parts[1]);
 
-            // Remove quotes if present
             if (str_starts_with($value, '"') && str_ends_with($value, '"')) {
                 $value = substr($value, 1, -1);
             } elseif (str_starts_with($value, "'") && str_ends_with($value, "'")) {
@@ -43,7 +41,6 @@ class Config
             }
 
             self::$env[$key] = $value;
-            // Also set as PHP env var for compatibility
             $_ENV[$key] = $value;
         }
 

@@ -5,20 +5,13 @@ use App\Database;
 
 require_once __DIR__ . '/autoload.php';
 
-// Load Environment
 try {
     Config::load(__DIR__ . '/.env');
 } catch (Exception $e) {
-    // If .env doesn't exist, we might be ensuring it exists next
-    // But for setup, better to have it.
     echo "Error loading configuration: " . $e->getMessage() . "\n";
     echo "Please ensure .env exists.\n";
     exit(1);
 }
-
-// 1. Create Database if strictly needed? 
-// Usually on shared hosting DB is created via cPanel. 
-// We assume DB exists as per connection string, but we can try to create tables.
 
 echo "Initializing Database Schema...\n";
 

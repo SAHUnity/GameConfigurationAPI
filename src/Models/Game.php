@@ -33,8 +33,6 @@ class Game
     public static function regenerateKey(int $id): string
     {
         $pdo = Database::getInstance();
-        // Look up old key to delete cache potentially (handled by controller/service usually, but good to know)
-        
         $newKey = bin2hex(random_bytes(32));
         $stmt = $pdo->prepare("UPDATE games SET api_key = ? WHERE id = ?");
         $stmt->execute([$newKey, $id]);

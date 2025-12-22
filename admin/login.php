@@ -1,6 +1,6 @@
 <?php
 $possiblePaths = [
-    __DIR__ . '/../',    // Standard: admin -> root
+    __DIR__ . '/../',
 ];
 
 $rootPath = null;
@@ -18,7 +18,6 @@ require $rootPath . 'autoload.php';
 use App\Auth;
 use App\Config;
 
-// Load Config
 try {
     Config::load($rootPath . '.env');
 } catch (Exception $e) {

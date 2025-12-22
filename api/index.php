@@ -31,7 +31,6 @@ try {
     Response::error("Internal Server Error: Config", 500);
 }
 
-// 2. Rate Limiting (Token Bucket)
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 $rateLimitDir = $rootPath . 'var/rate_limit/';
 $rateLimitFile = $rateLimitDir . md5($ip) . '.bucket';
@@ -75,7 +74,6 @@ if ($fp && flock($fp, LOCK_EX)) {
     if ($fp) fclose($fp);
 }
 
-// 3. API Key Validation
 $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? null;
 
 if (!$apiKey) {
@@ -85,7 +83,6 @@ if (!$apiKey) {
     }
 }
 
-// 4. Cache Check (Hot Path)
 if (!$apiKey || !preg_match('/^[a-f0-9]{64}$/', $apiKey)) {
     Response::error("Missing or Invalid X-API-KEY header", 400);
 }
@@ -97,7 +94,6 @@ if (file_exists($cacheFile)) {
     Response::json($config);
 }
 
-// 5. Cache Miss (Cold Path)
 try {
     $game = Game::getByApiKey($apiKey);
     
