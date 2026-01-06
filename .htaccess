@@ -1,12 +1,21 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    
+    # Block direct access (require Cloudflare origin)
+    RewriteCond %{HTTP:CF-Connecting-IP} ^$
+    RewriteRule ^ - [F,L]
+
+    # LOCK DOWN: Block direct access to the physical 'api' folder
+    RewriteCond %{THE_REQUEST} \s/api/?(\?|\s) [NC,OR]
+    RewriteCond %{THE_REQUEST} \s/api/index\.php [NC]
+    RewriteRule ^ - [F,L]
 
     # Block sensitive directories and files
     RewriteRule ^(src|var|tools|vendor|(\.git))(/|$) - [F]
     RewriteRule \.(env|json|lock|md|ps1|yml|xml|log)$ - [F]
     RewriteRule ^(autoload\.php|composer\.json|composer\.lock)$ - [F]
 
-    # API Routing
+    # API Routing (The only allowed entrance)
     RewriteRule ^api/v1/?$ api/index.php [L,QSA]
 
     # CORS Headers

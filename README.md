@@ -12,12 +12,14 @@ A production-ready, high-performance REST API designed for shared hosting enviro
 -   **Zero Bloat**: No heavy frameworks. Uses a custom lightweight PSR-4 autoloader.
 -   **Header-Only Auth**: Strictly enforces `X-API-KEY` header for improved security.
 -   **Deployment Tools**: Includes PowerShell tools for stress testing and secure credential generation.
+-   **Cloudflare Ready**: Optimized for Cloudflare with automatic IP resolution (`CF-Connecting-IP`) and origin bypass protection.
 
 ## 📋 Requirements
 
 -   **PHP 8.2+**
 -   **MySQL 8.0** or **MariaDB**
 -   **Apache** Web Server (with `mod_rewrite` enabled)
+-   **Cloudflare** (Recommended for origin protection and performance)
 
 ## 🛠️ cPanel Installation Guide
 
@@ -62,12 +64,13 @@ A production-ready, high-performance REST API designed for shared hosting enviro
 
 5.  **Directory Security**
     -   The `.htaccess` file included in the root directory is critical. It blocks access to sensitive files like `.env`, `src/`, and `autoload.php`. Ensure your web server allows `.htaccess` overrides.
+    -   **Origin Protection**: By default, `.htaccess` blocks all requests that do not originate from Cloudflare (missing `CF-Connecting-IP` header). To test locally without Cloudflare, you must temporarily comment out the origin protection rules in `.htaccess`.
 
 ### Deployment Note
 
 The project is designed to run from the root.
 -   **Admin Panel**: `https://yourdomain.com/admin/`
--   **API Endpoint**: `https://yourdomain.com/api/v1`
+-   **API Endpoint**: `https://yourdomain.com/api/v1` (Strictly enforced; direct access to `/api/` or `/api/index.php` is blocked).
 
 ## 📡 API Usage
 
@@ -123,3 +126,4 @@ Simulates high traffic to verify performance and rate limiting.
 -   [ ] **Delete `setup.php`** after installation.
 -   [ ] Ensure `var/` directory is writable by the web server.
 -   [ ] Verify that sensitive files (`.env`) are NOT accessible via browser.
+-   [ ] Verify Cloudflare origin protection is active in `.htaccess`.

@@ -5,8 +5,9 @@ use App\Config;
 use App\Database;
 use App\Models\Game;
 use App\Utils\Response;
+use App\Utils\Request;
 
-// 1. Load Autoloader & Config
+// Load Autoloader & Config
 $possiblePaths = [
     __DIR__ . '/../',
 ];
@@ -31,7 +32,7 @@ try {
     Response::error("Internal Server Error: Config", 500);
 }
 
-$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$ip = Request::getClientIp();
 $rateLimitDir = $rootPath . 'var/rate_limit/';
 $rateLimitFile = $rateLimitDir . md5($ip) . '.bucket';
 
@@ -43,7 +44,7 @@ if (!is_dir($rateLimitDir)) {
 }
 
 $fp = fopen($rateLimitFile, 'c+');
-if ($fp && flock($fp, LOCK_EX)) {
+if ($fp && flock($fp, LOCK_EX | LOCK_NB)) {
     $stat = fstat($fp);
     $content = $stat['size'] > 0 ? fread($fp, $stat['size']) : '';
     
@@ -71,7 +72,10 @@ if ($fp && flock($fp, LOCK_EX)) {
     flock($fp, LOCK_UN);
     fclose($fp);
 } else {
-    if ($fp) fclose($fp);
+    // Non-blocking lock failed - fail open (allow request)
+    if ($fp) {
+        fclose($fp);
+    }
 }
 
 $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? null;
