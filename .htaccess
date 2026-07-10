@@ -8,6 +8,8 @@
 
     # API Routing
     RewriteRule ^api/v1/?$ api/index.php [L,QSA]
+    # Block direct access to /api (must use /api/v1)
+    RewriteRule ^api/?$ - [R=404,L]
 
     # CORS Headers
     Header set Access-Control-Allow-Origin "*"
