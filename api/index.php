@@ -20,10 +20,18 @@ foreach ($possiblePaths as $path) {
 }
 
 if (!$rootPath) {
-    Response::error("Critical Error: Core files not found.", 500);
+    http_response_code(500);
+    echo json_encode(['error' => 'Critical Error: Core files not found.']);
+    exit;
 }
 
 require $rootPath . 'autoload.php';
+
+// Exit early for CORS Preflight requests
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
 
 try {
     Config::load($rootPath . '.env');
@@ -37,10 +45,6 @@ $rateLimitFile = $rateLimitDir . md5($ip) . '.bucket';
 
 $limit = 60; // requests
 $period = 60; // seconds
-
-if (!is_dir($rateLimitDir)) {
-    mkdir($rateLimitDir, 0755, true);
-}
 
 $fp = fopen($rateLimitFile, 'c+');
 if ($fp && flock($fp, LOCK_EX)) {

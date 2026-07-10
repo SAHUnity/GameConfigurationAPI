@@ -1,125 +1,126 @@
 # High-Performance Game Configuration API
 
-A production-ready, high-performance REST API designed for shared hosting environments (cPanel/Apache). It serves game configurations to clients with sub-millisecond response times using a "Read-Through" OPcache strategy.
+A production-ready, ultra-fast REST API designed specifically for low-resource shared hosting environments (cPanel/Apache/LiteSpeed). It serves dynamic game configurations to Unity clients with sub-millisecond response times.
 
-## 🚀 Features
+By leveraging a **Read-Through OPcache Strategy** and strictly separating the "Write" (Admin) and "Read" (API) paths, this system bypasses database bottlenecks entirely and serves configurations directly from the server's RAM.
 
--   **High Performance**: Uses generated `.php` files for caching, leveraging the server's OPcache to serve requests directly from RAM without database overhead.
--   **Stateless API**: The "Hot Path" (`/api/v1/...`) is completely stateless (no `session_start`).
--   **Atomic Updates**: Cache files are written atomically (write temp -> rename) to prevent race conditions during updates.
--   **Rate Limiting**: File-based token bucket algorithm limits abuse (default: 60/min) without touching the database.
--   **Secure Admin Panel**: Session-protected dashboard to manage games and configurations, including **Edit/Update** functionality.
--   **Zero Bloat**: No heavy frameworks. Uses a custom lightweight PSR-4 autoloader.
--   **Header-Only Auth**: Strictly enforces `X-API-KEY` header for improved security.
--   **Deployment Tools**: Includes PowerShell tools for stress testing and secure credential generation.
+## 🚀 Architectural Features
 
-## 📋 Requirements
+- **OPcache RAM Delivery:** The admin panel pre-parses JSON and writes raw `.php` array files to disk. The API simply `require`s these files, allowing PHP's OPcache to serve requests directly from memory—vastly outperforming traditional database/JSON-parsing architectures.
+- **Zero-Bloat Hot Path:** The `/api/v1/...` endpoint is 100% stateless. No `session_start()`, no framework bootstrapping, and **zero runtime schema/directory checks**. 
+- **Atomic Cache Updates:** Cache files are written atomically (write to temp -> `rename`) ensuring that even if 100 players request data at the exact millisecond you click "Save", nobody receives a corrupted file.
+- **Robust Rate Limiting:** A fixed-window token bucket algorithm (default: 60 req/min) uses atomic file-locking (`flock`). It safely prevents abuse without needing Redis, APCu, or touching the database, making it resilient even when handling bursts of traffic from CGNAT (Carrier-Grade NAT) networks.
+- **Early-Exit CORS:** Preflight `OPTIONS` requests are intercepted immediately, saving Apache workers from executing unnecessary logic.
+- **GZIP Output Compression:** Automatically compresses large JSON payloads to save bandwidth and improve delivery speed to mobile clients.
 
--   **PHP 8.2+**
--   **MySQL 8.0** or **MariaDB**
--   **Apache** Web Server (with `mod_rewrite` enabled)
+## 📋 Server Requirements
+
+- **PHP 8.2+** (OPcache extension highly recommended)
+- **MySQL 8.0** or **MariaDB**
+- **Apache** or **LiteSpeed** Web Server (with `mod_rewrite` enabled)
 
 ## 🛠️ cPanel Installation Guide
 
-1.  **Upload Files**
-    -   Upload the contents of this project to your `public_html` directory (or a subdirectory).
-    -   Ensure the structure looks like this:
-        ```
-        /public_html
-          ├── .env             (Create this from .env.example)
-          ├── .htaccess
-          ├── autoload.php
-          ├── setup.php
-          ├── index.php
-          ├── admin/
-          ├── api/
-          ├── src/
-          └── var/
-        ```
+### 1. Upload & Prepare
+Upload the contents of this repository to your web root (e.g., `public_html` or a subdomain folder). 
+*Note: The system uses a strict `.htaccess` file to shield core directories (`src/`, `var/`, `.env`) from public access.*
 
-2.  **Database Setup**
-    -   Create a Database and User via cPanel "MySQL Databases".
-    -   Take note of the Database Name, User, and Password.
+### 2. Database Setup
+Create a new MySQL Database and Database User in cPanel. Add the user to the database with **All Privileges**.
 
-3.  **Configuration**
-    -   Rename `.env.example` to `.env`.
-    -   Edit `.env` with your database and admin credentials:
-        ```ini
-        DB_HOST=localhost
-        DB_NAME=your_cpanel_db_name
-        DB_USER=your_cpanel_db_user
-        DB_PASS=your_cpanel_db_password
+### 3. Configuration
+Rename the `.env.example` file to `.env` and configure your credentials:
+```ini
+DB_HOST=localhost
+DB_NAME=your_cpanel_db_name
+DB_USER=your_cpanel_db_user
+DB_PASS=your_cpanel_db_password
 
-        ADMIN_USER=your_admin_username
-        ADMIN_PASSWORD=your_secure_password
-        ```
-
-4.  **Installation**
-    -   Run `setup.php` to initialize the database and creating the admin user.
-    -   **Recommended**: Run via command line: `php setup.php`
-    -   **Alternative**: If SSH is unavailable, access via browser (e.g., `https://yourdomain.com/setup.php`) then **delete the file immediately**.
-    -   The script will automatically create the admin user defined in your `.env`. If you change the password in `.env` and run `setup.php` again, it will update the existing user's password.
-
-5.  **Directory Security**
-    -   The `.htaccess` file included in the root directory is critical. It blocks access to sensitive files like `.env`, `src/`, and `autoload.php`. Ensure your web server allows `.htaccess` overrides.
-
-### Deployment Note
-
-The project is designed to run from the root.
--   **Admin Panel**: `https://yourdomain.com/admin/`
--   **API Endpoint**: `https://yourdomain.com/api/v1`
-
-## 📡 API Usage
-
-**Endpoint**: `GET /api/v1`
-**Header**: `X-API-KEY: {YOUR_API_KEY}`
-
-**Example Request**:
-```bash
-curl -H "X-API-KEY: a1b2c3d4e5f6..." https://yourdomain.com/api/v1
+ADMIN_USER=admin
+ADMIN_PASSWORD=your_secure_password
 ```
 
-**Response (200 OK)**:
+### 4. Run the Setup Script
+Navigate to the setup script in your browser to initialize the system:
+`https://yourdomain.com/setup.php`
+
+**What this script does:**
+- Creates the required MySQL tables (`games`, `configurations`, `users`).
+- Creates the Admin user based on your `.env` credentials.
+- Creates the necessary `var/cache/` and `var/rate_limit/` directories.
+
+### 5. 🚨 CRITICAL SECURITY STEP
+Once setup is complete, you **MUST delete `setup.php`** from your server. 
+
+### 6. Verify Permissions
+Ensure the web server has write access to the `var/` directory. On most cPanel servers, default permissions (`0755` for directories) will work automatically.
+
+---
+
+## 📡 API Usage (For Unity Clients)
+
+**Endpoint:** `GET /api/v1`  
+**Header:** `X-API-KEY: {YOUR_API_KEY}`
+
+### Example Request (cURL):
+```bash
+curl -H "X-API-KEY: a1b2c3d4e5f67890..." https://yourdomain.com/api/v1
+```
+
+### Example Success Response (200 OK):
 ```json
 {
+  "data": {
+    "welcome_message": "Welcome to the game!",
     "max_players": 100,
-    "server_url": "https://play.example.com",
-    "maintenance_mode": false
+    "daily_rewards": {
+      "gold": 100,
+      "gems": 5
+    }
+  },
+  "source": "cache"
 }
 ```
 
-**Response (429 Too Many Requests)**:
+### Example Rate Limit Response (429 Too Many Requests):
 ```json
 {
     "error": "Rate Limit Exceeded"
 }
 ```
 
-## ⚙️ Configuration
+---
 
-### Rate Limiting
-To change the rate limit (default 60 req/min), edit `api/index.php`:
+## 🎮 Admin Panel Usage
+
+Access the dashboard at `https://yourdomain.com/admin/` and log in using the credentials defined in your `.env` file.
+
+1. **Create a Game:** Click "+" under Games to generate a new game and an API Key.
+2. **Add Configurations:** Add Key/Value pairs. 
+   - *Pro-tip:* If you enter valid JSON in the Value box (e.g., `{"speed": 1.5}`), the system will intelligently parse it and deliver it to Unity as a native JSON object, not a string!
+3. **Instant Deployment:** Every time you Save, Edit, or Delete a config, the cache is instantly and atomically rebuilt. Unity clients get the new data on their very next request.
+
+---
+
+## ⚙️ Advanced Configuration
+
+### Adjusting Rate Limits
+By default, clients are limited to 60 requests per minute per IP. To change this, edit `api/index.php`:
 ```php
-$limit = 60; // requests
-$period = 60; // seconds
+$limit = 60;   // Maximum requests
+$period = 60;  // Time window in seconds
 ```
 
-### Cache
-Cache files are stored in `var/cache/`. They are automatically regenerated when you save configs in the Admin Panel. 
-To manually clear the cache, you can delete the contents of `var/cache`.
+### Performance Pro-Tip (cPanel)
+If your game has high traffic, your Apache `access_log` will grow rapidly because it writes a line of text for every single API request. For maximum performance, ask your host to **disable access logging specifically for the `/api/` directory**.
 
-## 🛠️ Utility Tools
+---
 
-Located in the `tools/` directory:
+## 🛠️ Included Testing Tools
 
-### Stress Test (`stress_test.ps1`)
-Simulates high traffic to verify performance and rate limiting.
+Located in the `tools/` directory, you will find `stress_test.ps1`. You can run this via PowerShell to verify your rate limiter and server performance:
+
 ```powershell
-.\tools\stress_test.ps1 -Url "http://yourdomain.com/api/v1" -Key "YOUR_KEY" -Count 100
+.\tools\stress_test.ps1 -Url "https://yourdomain.com/api/v1" -Key "YOUR_API_KEY" -Count 150
 ```
-
-## 🛡️ Security Checklist for Production
-
--   [ ] **Delete `setup.php`** after installation.
--   [ ] Ensure `var/` directory is writable by the web server.
--   [ ] Verify that sensitive files (`.env`) are NOT accessible via browser.
+*Expected result: The first 60 requests will succeed instantly, and the remaining 90 will correctly return `429 RATE LIMIT`.*

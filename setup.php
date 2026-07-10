@@ -15,6 +15,17 @@ try {
 
 echo "Initializing Database Schema...\n";
 
+$rateLimitDir = __DIR__ . '/var/rate_limit/';
+if (!is_dir($rateLimitDir)) {
+    mkdir($rateLimitDir, 0755, true);
+    echo "Directory 'var/rate_limit' created.\n";
+}
+$cacheDir = __DIR__ . '/var/cache/';
+if (!is_dir($cacheDir)) {
+    mkdir($cacheDir, 0755, true);
+    echo "Directory 'var/cache' created.\n";
+}
+
 try {
     $pdo = Database::getInstance();
     

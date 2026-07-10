@@ -13,9 +13,6 @@ class CacheService
     public function __construct()
     {
         $this->cacheDir = __DIR__ . '/../var/cache/';
-        if (!is_dir($this->cacheDir)) {
-            mkdir($this->cacheDir, 0755, true);
-        }
     }
 
     public function refresh(int $gameId): void
