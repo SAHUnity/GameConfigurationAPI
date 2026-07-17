@@ -127,6 +127,16 @@ $activeGameId = (int)($_GET['game_id'] ?? ($_POST['game_id'] ?? 0));
 $activeGame = null;
 $configs = [];
 
+// Load dynamic templates safely
+$templates = [];
+$templateFile = __DIR__ . '/templates.php';
+if (file_exists($templateFile)) {
+    $loaded = require $templateFile;
+    if (is_array($loaded)) {
+        $templates = $loaded;
+    }
+}
+
 if ($activeGameId) {
     foreach ($games as $g) {
         if ($g['id'] === $activeGameId) {
@@ -331,8 +341,18 @@ if ($activeGameId) {
                         <input type="text" name="key" class="form-control" required placeholder="e.g. max_players">
                     </div>
                     <div class="mb-3">
-                        <label>Value (JSON or String)</label>
-                        <textarea name="value" class="form-control font-monospace" rows="5" required placeholder='{"foo": "bar"}'></textarea>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label>Value (JSON or String)</label>
+                            <?php if (!empty($templates)): ?>
+                            <select class="form-select form-select-sm w-auto json-template-selector" data-target="add_value">
+                                <option value="">-- Insert Template --</option>
+                                <?php foreach ($templates as $name => $data): ?>
+                                <option value="<?= htmlspecialchars($name) ?>"><?= htmlspecialchars($name) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php endif; ?>
+                        </div>
+                        <textarea name="value" id="add_value" class="form-control font-monospace" rows="8" required placeholder='{"foo": "bar"}'></textarea>
                     </div>
                     <div class="mb-3">
                         <label>Description (Optional)</label>
@@ -362,7 +382,17 @@ if ($activeGameId) {
                         <small class="text-muted">Key name cannot be changed.</small>
                     </div>
                     <div class="mb-3">
-                        <label>Value</label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label>Value</label>
+                            <?php if (!empty($templates)): ?>
+                            <select class="form-select form-select-sm w-auto json-template-selector" data-target="edit_value">
+                                <option value="">-- Insert Template --</option>
+                                <?php foreach ($templates as $name => $data): ?>
+                                <option value="<?= htmlspecialchars($name) ?>"><?= htmlspecialchars($name) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php endif; ?>
+                        </div>
                         <textarea name="value" id="edit_value" class="form-control font-monospace" rows="10" required></textarea>
                     </div>
                     <div class="mb-3">
@@ -385,6 +415,24 @@ if ($activeGameId) {
             document.getElementById('edit_description').value = desc;
             new bootstrap.Modal(document.getElementById('editConfigModal')).show();
         }
+    </script>
+
+    <script>
+        // Template Injection Logic (Strict & Secure)
+        const templateData = <?= json_encode($templates, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+        document.querySelectorAll('.json-template-selector').forEach(selector => {
+            selector.addEventListener('change', function() {
+                const targetId = this.getAttribute('data-target');
+                const targetArea = document.getElementById(targetId);
+                const selectedName = this.value;
+
+                if (selectedName && templateData[selectedName] && targetArea) {
+                    targetArea.value = JSON.stringify(templateData[selectedName], null, 4);
+                    this.value = ""; // Reset dropdown
+                }
+            });
+        });
     </script>
     <?php endif; ?>
 
